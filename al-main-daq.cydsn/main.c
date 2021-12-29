@@ -2137,6 +2137,8 @@ int main(void)
     Pin_Sel13_J18_Write(0);
     Pin_Sel7_J20_Write(0);
     
+    Pin_Reset_Ev_SW_Write(0);
+    Pin_Reset_Ev_HW_Write(1); //Configed as hardware reset, so should be kept high during run
     
 		   /* Service USB CDC when device is configured. */
 //	if ((0u != USBUART_CD_GetConfiguration()) && (iBuffUsbTx > 0))
