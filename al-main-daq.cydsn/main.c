@@ -22,6 +22,7 @@
  * V1.9 Adding initial baro output 
  * V1.10 Adding all baros temp and press
  * V2.0 DON'T RUN on V2 Hardware this is a transition version to V3 with Ext SAR ADC
+ * V2.1 Corrected pinout to reenable nDataReady, spi, and add Event Reset for use with V5 and higher Event PSOC
  *
  * ========================================
 */
@@ -34,7 +35,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 0 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 1 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
