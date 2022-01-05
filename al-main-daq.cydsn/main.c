@@ -278,7 +278,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(32 + 39)
+#define NUMBER_INIT_CMDS	(32 + 37 + 30)
 uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
 	{0xDD, 0x36}, //T2 1860.7
@@ -324,19 +324,19 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x3C, 0x23},  //DAC Byte LSB
+	{0x14, 0x23},  //DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
-	{0x03, 0x22},  //DAC Byte
+	{0x00, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0x04, 0x22},  //DAC Byte
+	{0x00, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x04, 0x22},  //DAC Byte
+	{0x00, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x03, 0x22},  //DAC Byte    
+	{0x00, 0x22},  //DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
 	{0x01, 0x21},  //Mask 1 
 	{0x06, 0x22},  //Trigger Mask 06 T1 T4
@@ -349,10 +349,40 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x02, 0x21},  //Mask 2 
 	{0x00, 0x22},  //Trigger Mask 00 all
     {0x30, 0x21},  //Header for Output Mode Set
-	{0x01, 0x21},  //DEBUG 1 usb, change 0 SPI output 
-    {0x3B, 0x21},  //Header Trigger Enable Set
-	{0x00, 0x21},  //DEBUG Trigger Disabled, change back to Trigger Enabled
-//	{0x03, 0x20},  //Read Errors DEBUG
+	{0x00, 0x21},  //0 SPI output #37 adding more
+    // event Tracker Setup
+	{0x10, 0x23},  //Header for Tracker command
+	{0x00, 0x21},  //Reset FPGA
+	{0x04, 0x22},  //
+	{0x00, 0x23},  //
+	{0x03, 0x20},  //Read Errors
+    {0x10, 0x23},  //Header for Tracker command
+	{0x00, 0x21},  //Reset Config
+	{0x03, 0x22},  //
+	{0x00, 0x23},  //
+    {0x10, 0x60},  //Header for Tracker command
+	{0x00, 0x21},  //Set Number of layers
+	{0x0F, 0x22},  //
+	{0x01, 0x23},  //
+    {0x08, 0x60},  //8 layers
+    {0x10, 0x23},  //Header for Tracker command
+	{0x00, 0x21},  //ASIC power on
+	{0x08, 0x22},  //
+	{0x00, 0x23},  //
+    {0x10, 0x60},  //Header for Tracker command
+	{0x00, 0x21},  //ASIC Hard Reset
+	{0x05, 0x22},  //
+	{0x01, 0x23},  //
+    {0x1F, 0x60},  //All ASICs
+    {0x10, 0x60},  //Header for Tracker command
+	{0x00, 0x21},  //ASIC Soft Reset
+	{0x0C, 0x22},  //
+	{0x01, 0x23},  //
+    {0x1F, 0x60},  //All ASICs
+    {0x48, 0x21},  //Header for FPGA Input timing calibration
+	{0x08, 0x21},  //All FPGA. This command should be last since it currently takes time
+//  {0x3B, 0x21},  //Header Trigger Enable Set
+//	{0x00, 0x21},  //DEBUG Trigger Disabled, change back to Trigger Enabled
 //	{0x03, 0x20},  //Read Errors DEBUG
     }; //End init cmds
 #define CMD_BUFFER_SIZE (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
