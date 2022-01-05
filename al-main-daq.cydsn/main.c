@@ -23,7 +23,7 @@
  * V1.10 Adding all baros temp and press
  * V2.0 DON'T RUN on V2 Hardware this is a transition version to V3 with Ext SAR ADC
  * V2.1 Corrected pinout to reenable nDataReady, spi, and add Event Reset for use with V5 and higher Event PSOC
- * V2.1 Fix frame numbering, init commands for tracker testing
+ * V2.2 Fix frame numbering, init commands for tracker testing
  *
  * ========================================
 */
