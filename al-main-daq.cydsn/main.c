@@ -1177,7 +1177,7 @@ int8 CheckFrameBuffer()
             {
                 seqFrame2HB++;
             }
-            if (FRAME_DATA_BYTES < tmpWrite)
+            if (FRAME_DATA_BYTES <= tmpWrite)
             {
                
                 buffFrameDataWrite = WRAPINC(buffFrameDataWrite, FRAME_BUFFER_SIZE);
@@ -1198,7 +1198,7 @@ int8 CheckFrameBuffer()
             }
 		}
 		
-		if (FRAME_DATA_BYTES > tmpWrite)
+		if ((FRAME_DATA_BYTES > tmpWrite) && (0 < tmpWrite))
 		{
             uint8 bytesAlign = WRAP(tmpWrite, 3); //calc number of bytes off 3 byte alignment and temp store in iterRev (done with EOR checks)
             if (0 != bytesAlign) //check if misaligned search space
@@ -1282,7 +1282,7 @@ int8 CheckFrameBuffer()
             {
                 seqFrame2HB++;
             }
-            if (FRAME_DATA_BYTES < tmpWrite)
+            if (FRAME_DATA_BYTES <= tmpWrite)
             {
                
                 buffFrameDataWrite = WRAPINC(buffFrameDataWrite, FRAME_BUFFER_SIZE);
@@ -1303,7 +1303,7 @@ int8 CheckFrameBuffer()
             }
 		}
 		
-		if (FRAME_DATA_BYTES > tmpWrite)
+		if ((FRAME_DATA_BYTES > tmpWrite) && (0 < tmpWrite))
 		{
             uint8 bytesAlign = WRAP(tmpWrite, 3); //calc number of bytes off 3 byte alignment and temp store in iterRev (done with EOR checks)
             if (0 != bytesAlign) //check if misaligned search space
@@ -1359,7 +1359,7 @@ int8 CheckFrameBuffer()
             {
                 seqFrame2HB++;
             }
-            if (FRAME_DATA_BYTES < tmpWrite)
+            if (FRAME_DATA_BYTES <= tmpWrite)
             {
                 
                 buffFrameDataWrite = WRAPINC(buffFrameDataWrite, FRAME_BUFFER_SIZE);
@@ -1380,7 +1380,7 @@ int8 CheckFrameBuffer()
             }
 		}
 		
-		if (FRAME_DATA_BYTES > tmpWrite)
+		if ((FRAME_DATA_BYTES > tmpWrite) && (0 < tmpWrite))
 		{
             uint8 bytesAlign = WRAP(tmpWrite, 3); //calc number of bytes off 3 byte alignment and temp store in iterRev (done with EOR checks)
             if (0 != bytesAlign) //check if misaligned search space
