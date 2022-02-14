@@ -25,6 +25,7 @@
  * V2.1 Corrected pinout to reenable nDataReady, spi, and add Event Reset for use with V5 and higher Event PSOC
  * V2.2 Fix frame numbering, init commands for tracker testing
  * V2.3 Fix stale frame data issue introduced in last fix
+ * V2.4 Remove USB data placeholder for Low Rate packet data that was overflowing to other mem 
  *
  * ========================================
 */
@@ -37,7 +38,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 3 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 4 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -603,12 +604,12 @@ void SendInitCmds()
 
 int SendLRScienceData()
 {
-    //TODO collect the subset of data 
-    buffUsbTx[iBuffUsbTx++] = DLE;
-    buffUsbTx[iBuffUsbTx++] = SDATA_ID;
-    buffUsbTx[iBuffUsbTx++] = 1;
-    buffUsbTx[iBuffUsbTx++] = 0;
-    buffUsbTx[iBuffUsbTx++] = ETX;
+//    //TODO collect the subset of data 
+//    buffUsbTx[iBuffUsbTx++] = DLE;
+//    buffUsbTx[iBuffUsbTx++] = SDATA_ID;
+//    buffUsbTx[iBuffUsbTx++] = 1;
+//    buffUsbTx[iBuffUsbTx++] = 0;
+//    buffUsbTx[iBuffUsbTx++] = ETX;
     
     return 1;
 }
@@ -2811,12 +2812,12 @@ int main(void)
 					iBuffUsbTx = 0; //TODO handle missed writes
 					
 				}
-				if (iBuffUsbTxDebug > 0)
-				{
-					while (0 == USBUART_CD_CDCIsReady());
-					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
-					iBuffUsbTxDebug = 0; //TODO handle missed writes
-				}
+//				if (iBuffUsbTxDebug > 0)
+//				{
+//					while (0 == USBUART_CD_CDCIsReady());
+//					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
+//					iBuffUsbTxDebug = 0; //TODO handle missed writes
+//				}
 				
 				
 		
@@ -2824,11 +2825,11 @@ int main(void)
 			}
 			
 		}
-		else
-		{
-			iBuffUsbTx = 0; //TODO handle missed writes
-			iBuffUsbTxDebug = 0; //TODO handle missed writes
-		}
+//		else
+//		{
+		iBuffUsbTx = 0; //TODO handle missed writes
+		iBuffUsbTxDebug = 0; //TODO handle missed writes
+//		}
 		
 				/* Send data back to host. */
 			   
