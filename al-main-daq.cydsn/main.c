@@ -26,6 +26,7 @@
  * V2.2 Fix frame numbering, init commands for tracker testing
  * V2.3 Fix stale frame data issue introduced in last fix
  * V2.4 Remove USB data placeholder for Low Rate packet data that was overflowing to other mem 
+ * V2.5 Fix SPI output skipping frames 
  *
  * ========================================
 */
@@ -38,7 +39,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 4 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 5 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1110,9 +1111,11 @@ uint32 cntFramesDroppedUSB = 0; // number of frames overwritten before being sen
 
 int8 CheckFrameBuffer()
 {
-	if (UART_HR_Data_GetTxBufferSize() <= 0)
+	
+    if (buffFrameDataWrite != buffFrameDataRead)
     {
-        if (buffFrameDataWrite != buffFrameDataRead)
+//        if (UART_HR_Data_GetTxBufferSize() <= 0)
+        if ((UART_HR_Data_GetTxBufferSize() <= 0) && (0 != (UART_HR_Data_ReadTxStatus() | UART_HR_Data_TX_STS_FIFO_EMPTY  ) ))
         {
             UART_HR_Data_PutArray((uint8*)&(buffFrameData[ buffFrameDataRead ]) , sizeof(FrameOutput));
             buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
