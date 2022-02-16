@@ -1115,7 +1115,7 @@ int8 CheckFrameBuffer()
     if (buffFrameDataWrite != buffFrameDataRead)
     {
 //        if (UART_HR_Data_GetTxBufferSize() <= 0)
-        if ((UART_HR_Data_GetTxBufferSize() <= 0) && (0 != (UART_HR_Data_ReadTxStatus() | UART_HR_Data_TX_STS_FIFO_EMPTY  ) ))
+        if ((UART_HR_Data_GetTxBufferSize() <= 0) && (0 != (UART_HR_Data_ReadTxStatus() & UART_HR_Data_TX_STS_FIFO_EMPTY  ) ))
         {
             UART_HR_Data_PutArray((uint8*)&(buffFrameData[ buffFrameDataRead ]) , sizeof(FrameOutput));
             buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
