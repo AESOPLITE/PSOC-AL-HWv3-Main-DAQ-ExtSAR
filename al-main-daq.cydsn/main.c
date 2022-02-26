@@ -26,7 +26,8 @@
  * V2.2 Fix frame numbering, init commands for tracker testing
  * V2.3 Fix stale frame data issue introduced in last fix
  * V2.4 Remove USB data placeholder for Low Rate packet data that was overflowing to other mem 
- * V2.5 Fix SPI output skipping frames 
+ * V2.5 Fix UART HR output skipping frames 
+ * V2.6 Change UART HR to use DMA instead of software buffer 
  *
  * ========================================
 */
@@ -39,7 +40,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 5 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 6 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -237,7 +238,14 @@ uint8 buffCmdRxC[COMMAND_SOURCES][DMA_LR_Cmd_1_BUFFER_SIZE];
 reg16 * buffCmdRxCWritePtr[COMMAND_SOURCES];
 uint8 buffCmdRxCRead[COMMAND_SOURCES];
 
-
+/* Defines for DMA_LR_Cmd_1 */
+#define DMA_HR_Data_BYTES_PER_BURST 1
+#define DMA_HR_Data_REQUEST_PER_BURST 1
+#define DMA_HR_Data_SRC_BASE (CYDEV_SRAM_BASE)
+#define DMA_HR_Data_DST_BASE (CYDEV_PERIPH_BASE)
+//#define DMA_HR_Data_BUFFER_SIZE 16
+uint8 DMAHRDataChan;
+uint8 DMAHRDataActive = FALSE;
 
 //const uint8 continueReadFlags = (SPIM_BP_STS_SPI_IDLE | SPIM_BP_STS_TX_FIFO_EMPTY);
 volatile uint8 continueRead = FALSE;
@@ -1114,13 +1122,41 @@ int8 CheckFrameBuffer()
 	
     if (buffFrameDataWrite != buffFrameDataRead)
     {
-//        if (UART_HR_Data_GetTxBufferSize() <= 0)
-        if ((UART_HR_Data_GetTxBufferSize() <= 0) && (0 != (UART_HR_Data_ReadTxStatus() & UART_HR_Data_TX_STS_FIFO_EMPTY  ) ))
+        uint8 tempRes;
+        switch (DMAHRDataActive)
         {
-            UART_HR_Data_PutArray((uint8*)&(buffFrameData[ buffFrameDataRead ]) , sizeof(FrameOutput));
-            buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
-            
+            case TRUE:
+                
+                tempRes = Status_Reg_UART_DMA_Read();
+                if(0 == (tempRes | 0x1)) break;
+                buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
+                if (buffFrameDataWrite == buffFrameDataRead)
+                {
+                    DMAHRDataActive = FALSE;
+                    break;
+                }
+            case FALSE:
+            tempRes = CyDmaTdAllocate();
+            CyDmaTdSetConfiguration(tempRes, 1u, DMA_INVALID_TD, CY_DMA_TD_INC_SRC_ADR);
+
+    
+            CyDmaTdSetAddress(tempRes, LO16((uint32)&(buffFrameData[ buffFrameDataRead ].seqM)), LO16((uint32)UART_HR_Data_TXDATA_PTR));// Set Source and Destination address
+
+    
+            CyDmaChSetInitialTd(DMAHRDataChan, tempRes);//TD initialization
+
+    
+            CyDmaChEnable(DMAHRDataChan, 0u);//Enable the DMA channel    
+            UART_HR_Data_PutChar((buffFrameData[ buffFrameDataRead ].seqH)); //start UART with first byte DM wil get rest
         }
+            
+//        if (UART_HR_Data_GetTxBufferSize() <= 0)
+//        if ((UART_HR_Data_GetTxBufferSize() <= 0) && (0 != (UART_HR_Data_ReadTxStatus() & UART_HR_Data_TX_STS_FIFO_EMPTY  ) ))
+//        {
+////            UART_HR_Data_PutArray((uint8*)&(buffFrameData[ buffFrameDataRead ]) , sizeof(FrameOutput));
+//            buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
+//            
+//        }
     }
     
     if (buffFrameDataWrite != buffFrameDataReadUSB)
@@ -2202,7 +2238,8 @@ int main(void)
 //	}
 //	lastDrdyCap = Timer_Drdy_ReadPeriod();
 	
-	Control_Reg_R_Write(0x00u);
+	Control_Reg_R_Write(0x00u); //set global reset off to start boards and components
+	Control_Reg_MIP_Out_Write(0x03u); //Output Data packet to both MIP
 
 //	Control_Reg_SS_Write(tabSPISel[0u]);
 //	Control_Reg_CD_Write(1u);
@@ -2258,6 +2295,8 @@ int main(void)
     
     InitFrameBuffer(); //intialize sync and seq num
     InitHKBuffer();
+    DMAHRDataChan  = DMA_HR_Data_DmaInitialize(DMA_HR_Data_BYTES_PER_BURST, DMA_HR_Data_REQUEST_PER_BURST, DMA_HR_Data_SRC_BASE, DMA_HR_Data_DST_BASE); //keep this high rate channel for UART
+    
     CyDelay(7000); //7 sec delay for boards to init TODO Debug
 
     I2C_RTC_MasterClearStatus();
