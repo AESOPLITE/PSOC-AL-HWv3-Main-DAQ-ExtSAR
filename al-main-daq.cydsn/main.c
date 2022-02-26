@@ -1151,9 +1151,10 @@ int8 CheckFrameBuffer()
 
                 CyDmaChSetInitialTd(DMAHRDataChan, DMAHRDataTd);//TD initialization
         
+                tempRes = UART_HR_Data_ReadTxStatus(); //clear any pending interrupts
                 CyDmaClearPendingDrq(DMAHRDataTd);//clear in case there is already a drq
-                CyDmaChEnable(DMAHRDataChan, 0u);//Enable the DMA channel    
                 UART_HR_Data_PutChar((buffFrameData[ buffFrameDataRead ].seqH)); //start UART with first byte DMA will get rest
+                CyDmaChEnable(DMAHRDataChan, 0u);//Enable the DMA channel    
                 
         }
             
