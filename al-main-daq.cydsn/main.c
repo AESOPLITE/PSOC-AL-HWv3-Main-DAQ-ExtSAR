@@ -245,7 +245,8 @@ uint8 buffCmdRxCRead[COMMAND_SOURCES];
 #define DMA_HR_Data_SRC_BASE (CYDEV_SRAM_BASE)
 #define DMA_HR_Data_DST_BASE (CYDEV_PERIPH_BASE)
 //#define DMA_HR_Data_BUFFER_SIZE 16
-uint8 DMAHRDataChan;
+uint8 DMAHRDataChan = CY_DMA_INVALID_CHANNEL;
+uint8 DMAHRDataTd = CY_DMA_INVALID_TD;
 uint8 DMAHRDataActive = FALSE;
 
 //const uint8 continueReadFlags = (SPIM_BP_STS_SPI_IDLE | SPIM_BP_STS_TX_FIFO_EMPTY);
@@ -1185,27 +1186,34 @@ int8 CheckFrameBuffer()
         {
             case TRUE:
                 
-                tempRes = Status_Reg_UART_DMA_Read();
-                if(0 == (tempRes | 0x1)) break;
-                buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE);
+                tempRes = Status_Reg_UART_DMA_Read(); //check for nrq from finished DMA
+                if(0 == (tempRes & 0x1)) break; //no nrq so exit 
+                buffFrameDataRead = WRAPINC(buffFrameDataRead, FRAME_BUFFER_SIZE); //nrq indincates DMA finished 
                 if (buffFrameDataWrite == buffFrameDataRead)
                 {
-                    DMAHRDataActive = FALSE;
+                    DMAHRDataActive = FALSE; //nothing left in buffer
                     break;
                 }
             case FALSE:
-            tempRes = CyDmaTdAllocate();
-            CyDmaTdSetConfiguration(tempRes, 1u, DMA_INVALID_TD, CY_DMA_TD_INC_SRC_ADR);
+                DMAHRDataActive = TRUE; //indicate that DMA is starting up
+                if (DMA_INVALID_TD != DMAHRDataTd) //Check for old TD
+                {
+                    CyDmaTdFree(DMAHRDataTd); //free old TD
+                    
+                }
+                DMAHRDataTd = CyDmaTdAllocate(); //allocate new TD
+                
+                CyDmaTdSetConfiguration(DMAHRDataTd, (sizeof(FrameOutput) - 1), DMA_DISABLE_TD, (CY_DMA_TD_INC_SRC_ADR | DMA_HR_Data__TD_TERMOUT_EN)); // transfer frame 1 byte at time except the first byte
 
-    
-            CyDmaTdSetAddress(tempRes, LO16((uint32)&(buffFrameData[ buffFrameDataRead ].seqM)), LO16((uint32)UART_HR_Data_TXDATA_PTR));// Set Source and Destination address
+                CyDmaTdSetAddress(DMAHRDataTd, LO16((uint32)&(buffFrameData[ buffFrameDataRead ].seqM)), LO16((uint32)UART_HR_Data_TXDATA_PTR));// Set Source and Destination address
 
-    
-            CyDmaChSetInitialTd(DMAHRDataChan, tempRes);//TD initialization
-
-    
-            CyDmaChEnable(DMAHRDataChan, 0u);//Enable the DMA channel    
-            UART_HR_Data_PutChar((buffFrameData[ buffFrameDataRead ].seqH)); //start UART with first byte DM wil get rest
+                CyDmaChSetInitialTd(DMAHRDataChan, DMAHRDataTd);//TD initialization
+        
+                tempRes = UART_HR_Data_ReadTxStatus(); //clear any pending interrupts
+                CyDmaClearPendingDrq(DMAHRDataTd);//clear in case there is already a drq
+                UART_HR_Data_PutChar((buffFrameData[ buffFrameDataRead ].seqH)); //start UART with first byte DMA will get rest
+                CyDmaChEnable(DMAHRDataChan, 0u);//Enable the DMA channel    
+                
         }
             
 //        if (UART_HR_Data_GetTxBufferSize() <= 0)
@@ -2353,7 +2361,7 @@ int main(void)
     
     InitFrameBuffer(); //intialize sync and seq num
     InitHKBuffer();
-    DMAHRDataChan  = DMA_HR_Data_DmaInitialize(DMA_HR_Data_BYTES_PER_BURST, DMA_HR_Data_REQUEST_PER_BURST, DMA_HR_Data_SRC_BASE, DMA_HR_Data_DST_BASE); //keep this high rate channel for UART
+    DMAHRDataChan  = DMA_HR_Data_DmaInitialize(DMA_HR_Data_BYTES_PER_BURST, DMA_HR_Data_REQUEST_PER_BURST, HI16(DMA_HR_Data_SRC_BASE), HI16(DMA_HR_Data_DST_BASE)); //keep this high rate channel for UART
     
     CyDelay(7000); //7 sec delay for boards to init TODO Debug
 
