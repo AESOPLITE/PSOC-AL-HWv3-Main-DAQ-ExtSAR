@@ -2258,7 +2258,7 @@ int main(void)
 //    CyDmaChSetInitialTd(DMA_LR_Cmd_1_Chan, DMA_LR_Cmd_1_TD[0]);
 //    CyDmaChEnable(DMA_LR_Cmd_1_Chan, 1);
     
-    buffCmdRxCWritePtr[0] = (reg16 *) &CY_DMA_TDMEM_STRUCT_PTR[0].TD1[2u];
+//    buffCmdRxCWritePtr[0] = (reg16 *) &CY_DMA_TDMEM_STRUCT_PTR[0].TD1[2u];
     
 	SPIM_BP_Start();
 	SPIM_BP_ClearFIFO();
