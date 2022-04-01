@@ -28,6 +28,7 @@
  * V2.4 Remove USB data placeholder for Low Rate packet data that was overflowing to other mem 
  * V2.5 Fix UART HR output skipping frames 
  * V2.6 Change UART HR to use DMA instead of software buffer 
+ * V2.7 Init tracker to use new tracker trigger cable 
  *
  * ========================================
 */
@@ -40,7 +41,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 6 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 7 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -289,7 +290,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(32 + 37 + 30)
+#define NUMBER_INIT_CMDS	(32 + 40 + 84)
 uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
 	{0xDD, 0x36}, //T2 1860.7
@@ -334,17 +335,17 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x40, 0x23},  //DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5
-	{0x00, 0x22},  //DAC Byte MSB
-	{0x14, 0x23},  //DAC Byte LSB
+	{0x0F, 0x22},  //DAC Byte MSB
+	{0xA0, 0x23},  //DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
-	{0x00, 0x22},  //DAC Byte
+	{0xC8, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0x00, 0x22},  //DAC Byte
+	{0xC8, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x00, 0x22},  //DAC Byte
+	{0x01, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
 	{0x00, 0x22},  //DAC Byte    
@@ -353,6 +354,9 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x06, 0x22},  //Trigger Mask 06 T1 T4
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x02, 0x21},  //PMT
+	{0x04, 0x22},  //Prescale by 4     
+    {0x39, 0x22},  //Header for Trigger Prescale Set
+    {0x01, 0x21},  //Tracker
 	{0x04, 0x22},  //Prescale by 4 
     {0x3A, 0x21},  //Header for Trigger Window Set
     {0x18, 0x21},  //Trigger Window Data
@@ -366,16 +370,69 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x00, 0x21},  //Reset FPGA
 	{0x04, 0x22},  //
 	{0x00, 0x23},  //
-	{0x03, 0x20},  //Read Errors
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //Reset Config
 	{0x03, 0x22},  //
 	{0x00, 0x23},  //
     {0x10, 0x60},  //Header for Tracker command
-	{0x00, 0x21},  //Set Number of layers
-	{0x0F, 0x22},  //
-	{0x01, 0x23},  //
+	{0x00, 0x21},  //0 ID
+	{0x0F, 0x22},  //Set Number of layers
+	{0x01, 0x23},  //1 data bytes
     {0x08, 0x60},  //8 layers
+    {0x10, 0x60},  //Header for Tracker command
+	{0x00, 0x21},  //0 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x01, 0x21},  //1 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x02, 0x21},  //2 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x03, 0x21},  //3 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x04, 0x21},  //4 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x05, 0x21},  //5 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x00, 0x60},  //Excluded
+    {0x10, 0x60},  //Header for Tracker command
+	{0x06, 0x21},  //6 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x00, 0x60},  //Excluded
+    {0x10, 0x60},  //Header for Tracker command
+	{0x07, 0x21},  //7 ID
+	{0x62, 0x22},  //Set Trigger Mask
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //Included
+    {0x10, 0x60},  //Header for Tracker command
+	{0x06, 0x21},  //6 ID
+	{0x5A, 0x22},  //Set Tracker Trigger End Status
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //End of Bending
+    {0x10, 0x60},  //Header for Tracker command
+	{0x07, 0x21},  //7 ID
+	{0x5A, 0x22},  //Set Tracker Trigger End Status
+	{0x01, 0x23},  //1 data bytes
+    {0x01, 0x60},  //End of Non bending
+    {0x10, 0x23},  //Header for Tracker command
+	{0x00, 0x21},  //All
+	{0x65, 0x22},  //Tracker Trigger Enable
+	{0x00, 0x23},  //0 data bytes
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //ASIC power on
 	{0x08, 0x22},  //
@@ -390,13 +447,14 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x0C, 0x22},  //
 	{0x01, 0x23},  //
     {0x1F, 0x60},  //All ASICs
+    {0x03, 0x20},  //Read Errors
     {0x48, 0x21},  //Header for FPGA Input timing calibration
 	{0x08, 0x21},  //All FPGA. This command should be last since it currently takes time
 //  {0x3B, 0x21},  //Header Trigger Enable Set
 //	{0x00, 0x21},  //DEBUG Trigger Disabled, change back to Trigger Enabled
 //	{0x03, 0x20},  //Read Errors DEBUG
     }; //End init cmds
-#define CMD_BUFFER_SIZE (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
+#define CMD_BUFFER_SIZE 256 // max value for index since init commands is getting longer than half buffer (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
 uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];
 uint8 readBuffCmd[COMMAND_SOURCES];// = 0;
 volatile uint8 writeBuffCmd[COMMAND_SOURCES];// = 0;
