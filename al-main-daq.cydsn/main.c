@@ -363,7 +363,7 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x18, 0x21},  //Trigger Window Data
     {0x36, 0x22},  //Header for Trigger Mask Set
     {0x02, 0x21},  //Mask 2 
-	{0x00, 0x22},  //Trigger Mask 00 all
+	{0x01, 0x22},  //Trigger Mask 01 T1 T2 T3
     {0x30, 0x21},  //Header for Output Mode Set
 	{0x00, 0x21},  //0 SPI output #37 adding more
     // event Tracker Setup
@@ -432,7 +432,7 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x01, 0x60},  //End of Non bending
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //All
-	{0x65, 0x22},  //Tracker Trigger Enable
+	{0x66, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
 	{0x00, 0x23},  //0 data bytes
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //ASIC power on
