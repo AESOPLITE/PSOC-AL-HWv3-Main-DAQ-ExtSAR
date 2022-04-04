@@ -346,10 +346,10 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xC8, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x01, 0x22},  //DAC Byte
+	{0x05, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x00, 0x22},  //DAC Byte    
+	{0x05, 0x22},  //DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
 	{0x01, 0x21},  //Mask 1 
 	{0x06, 0x22},  //Trigger Mask 06 T1 T4
@@ -360,7 +360,7 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x01, 0x21},  //Tracker
 	{0x04, 0x22},  //Prescale by 4 
     {0x3A, 0x21},  //Header for Trigger Window Set
-    {0x18, 0x21},  //Trigger Window Data
+    {0x30, 0x21},  //Trigger Window Data
     {0x36, 0x22},  //Header for Trigger Mask Set
     {0x02, 0x21},  //Mask 2 
 	{0x01, 0x22},  //Trigger Mask 01 T1 T2 T3
@@ -432,7 +432,7 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x01, 0x60},  //End of Non bending
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //All
-	{0x66, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
+	{0x65, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
 	{0x00, 0x23},  //0 data bytes
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //ASIC power on
