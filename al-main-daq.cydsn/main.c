@@ -421,7 +421,7 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x01, 0x23},  //1 data bytes
     {0x01, 0x60},  //Included
     {0x10, 0x60},  //Header for Tracker command
-	{0x06, 0x21},  //6 ID
+	{0x03, 0x21},  //3 ID
 	{0x5A, 0x22},  //Set Tracker Trigger End Status
 	{0x01, 0x23},  //1 data bytes
     {0x01, 0x60},  //End of Bending
