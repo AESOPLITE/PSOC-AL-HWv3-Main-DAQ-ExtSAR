@@ -291,7 +291,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(32 + 40 + 128)
+#define NUMBER_INIT_CMDS	(32 + 40 + 134)
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
 	{0xDD, 0x36}, //T2 1860.7
@@ -478,6 +478,12 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x02, 0x23},  //2 data bytes
     {0x1F, 0x60},  //All ASICs
     {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x00, 0x21},  //0 ID
+	{0x06, 0x22},  //Set Trigger Delay
+	{0x02, 0x23},  //2 data bytes
+    {0x00, 0x60},  //0 Delay Cycles
+    {0x00, 0x61},  //0 Stretch
 //    {0x10, 0x23},  //Header for Tracker command
 //	{0x00, 0x21},  //All
 //	{0x65, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
