@@ -291,8 +291,8 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(32 + 40 + 84)
-uint8 initCmd[NUMBER_INIT_CMDS][2] = {
+#define NUMBER_INIT_CMDS	(32 + 40 + 128)
+const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
 	{0xDD, 0x36}, //T2 1860.7
 	{0xCA, 0x37}, //T3 1704.7
@@ -430,10 +430,58 @@ uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x5A, 0x22},  //Set Tracker Trigger End Status
 	{0x01, 0x23},  //1 data bytes
     {0x01, 0x60},  //End of Non bending
-    {0x10, 0x23},  //Header for Tracker command
-	{0x00, 0x21},  //All
-	{0x65, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
-	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x61},  //Header for Tracker command
+	{0x00, 0x21},  //0 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x01, 0x21},  //1 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x02, 0x21},  //2 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x03, 0x21},  //3 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x04, 0x21},  //4 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x05, 0x21},  //5 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x06, 0x21},  //6 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+    {0x10, 0x61},  //Header for Tracker command
+	{0x07, 0x21},  //7 ID
+	{0x11, 0x22},  //Set Trigger Threshold
+	{0x02, 0x23},  //2 data bytes
+    {0x1F, 0x60},  //All ASICs
+    {0x1A, 0x61},  //26 Threshold
+//    {0x10, 0x23},  //Header for Tracker command
+//	{0x00, 0x21},  //All
+//	{0x65, 0x22},  //Tracker Trigger Enable DEBUG disable 0x66 change back to 0x65 for enable
+//	{0x00, 0x23},  //0 data bytes
     {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //ASIC power on
 	{0x08, 0x22},  //
