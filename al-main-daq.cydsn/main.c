@@ -294,10 +294,10 @@ volatile uint8 continueRead = FALSE;
 #define NUMBER_INIT_CMDS	(32 + 40 + 134)
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
-	{0xDD, 0x36}, //T2 1860.7
+	{0xD0, 0x36}, //T2 1751
 	{0xCA, 0x37}, //T3 1704.7
 	{0xBF, 0xB5}, //T4 1603.7
-	{0xCB, 0x74}, //G  1706.8
+	{0xD1, 0x74}, //G  1757
 	{0x00, 0x39}, //Dual PHA card 0, All PHA Discriminators set to 7.0
 	{0x07, 0x3A}, //T1
 	{0x00, 0x39}, //Dual PHA card 0
@@ -340,22 +340,22 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xA0, 0x23},  //DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
-	{0xC8, 0x22},  //DAC Byte
+	{0x06, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0xC8, 0x22},  //DAC Byte
+	{0x06, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x05, 0x22},  //DAC Byte
+	{0x0B, 0x22},  //DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x05, 0x22},  //DAC Byte    
+	{0x08, 0x22},  //DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
 	{0x01, 0x21},  //Mask 1 
-	{0x06, 0x22},  //Trigger Mask 06 T1 T4
+	{0x04, 0x22},  //Trigger Mask 04 T1 T3 T4
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x02, 0x21},  //PMT
-	{0x04, 0x22},  //Prescale by 4     
+	{0x01, 0x22},  //Prescale by 1     
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x01, 0x21},  //Tracker
 	{0x04, 0x22},  //Prescale by 4 
@@ -363,7 +363,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x30, 0x21},  //Trigger Window Data
     {0x36, 0x22},  //Header for Trigger Mask Set
     {0x02, 0x21},  //Mask 2 
-	{0x01, 0x22},  //Trigger Mask 01 T1 T2 T3
+	{0x06, 0x22},  //Trigger Mask 06 T1 T4
     {0x30, 0x21},  //Header for Output Mode Set
 	{0x00, 0x21},  //0 SPI output #37 adding more
     // event Tracker Setup
