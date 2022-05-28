@@ -383,7 +383,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x00, 0x60},  //0 Delay Cycles
     {0x00, 0x61},  //0 Stretch
     {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command
-	{0x00, 0x21},  //8 Layers
+	{0x08, 0x21},  //8 Layers
     {0x03, 0x20},  //Read Errors
     {0x48, 0x21},  //Header for FPGA Input timing calibration
 	{0x08, 0x21},  //All FPGA. This command should be last since it currently takes time
