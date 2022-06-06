@@ -29,7 +29,7 @@
  * V2.5 Fix UART HR output skipping frames 
  * V2.6 Change UART HR to use DMA instead of software buffer 
  * V2.7 Init tracker to use new tracker trigger cable 
- * V2.7 Init commands for new v23 Event PSOC 
+ * V2.8 Init commands for new v23 Event PSOC with housekeeping
  *
  * ========================================
 */
@@ -292,39 +292,13 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(32 + 40 + 19)
+#define NUMBER_INIT_CMDS	(6 + 42 + 88)
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xAF, 0x35}, //T1 1500.2V High Voltage
 	{0xD0, 0x36}, //T2 1751
 	{0xCA, 0x37}, //T3 1704.7
 	{0xBF, 0xB5}, //T4 1603.7
 	{0xD1, 0x74}, //G  1757
-	{0x00, 0x39}, //Dual PHA card 0, All PHA Discriminators set to 7.0
-	{0x07, 0x3A}, //T1
-	{0x00, 0x39}, //Dual PHA card 0
-	{0x07, 0x78}, //T2
-	{0x01, 0x39}, //Dual PHA card 1
-	{0x07, 0x3A}, //T3
-	{0x01, 0x39}, //Dual PHA card 1
-	{0x07, 0x78}, //T4
-	{0x02, 0x39}, //Dual PHA card 2
-	{0x07, 0x3A}, //G	
-	{0x02, 0x39}, //Dual PHA card 2
-	{0x07, 0x78}, //No Input
-	{0x00, 0x39}, //Dual PHA card 0, All Logic Discriminators set to 7.0
-	{0x07, 0x3B}, //T1
-	{0x00, 0x39}, //Dual PHA card 0
-	{0x07, 0x79}, //T2
-	{0x01, 0x39}, //Dual PHA card 1
-	{0x07, 0x3B}, //T3
-	{0x01, 0x39}, //Dual PHA card 1
-	{0x07, 0x79}, //T4
-	{0x02, 0x39}, //Dual PHA card 2
-	{0x07, 0x3B}, //G
-	{0x02, 0x39}, //Dual PHA card 2
-	{0x07, 0x79}, //No Input
-	{0xF8, 0x38}, //T1 T2 T3 Coincidence
-	{0x0A, 0xB7}, //10sec counter R/O
 	{0x0A, 0xB6},  //10sec Power R/O
     // event PSOC DAC Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC
@@ -367,13 +341,71 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x06, 0x22},  //Trigger Mask 06 T1 T4
     {0x30, 0x21},  //Header for Output Mode Set
 	{0x00, 0x21},  //0 SPI output 
+    {0x4F, 0x21},  //Header for PMT Trigger Delay command
+	{0x0C, 0x21},  //12 cylce delay 
     // event Tracker Setup
 	{0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //0 ID
 	{0x04, 0x22},  //Reset FPGA
 	{0x00, 0x23},  //0 data bytes
     {0x10, 0x23},  //Header for Tracker command
+	{0x01, 0x21},  //1 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x02, 0x21},  //2 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x03, 0x21},  //3 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x04, 0x21},  //4 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x05, 0x21},  //5 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x06, 0x21},  //6 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x07, 0x21},  //7 ID
+	{0x04, 0x22},  //Reset FPGA
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //0 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x01, 0x21},  //1 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x02, 0x21},  //2 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x03, 0x21},  //3 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x04, 0x21},  //4 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x05, 0x21},  //5 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x06, 0x21},  //6 ID
+	{0x03, 0x22},  //Reset Config
+	{0x00, 0x23},  //0 data bytes
+    {0x10, 0x23},  //Header for Tracker command
+	{0x07, 0x21},  //7 ID
 	{0x03, 0x22},  //Reset Config
 	{0x00, 0x23},  //0 data bytes
     {0x10, 0x61},  //Header for Tracker command
@@ -382,8 +414,21 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x02, 0x23},  //2 data bytes
     {0x00, 0x60},  //0 Delay Cycles
     {0x00, 0x61},  //0 Stretch
+    {0x59, 0xA0},  //Header for Tracker Layer Map command
+	{0x02, 0x21},  //Tracker C
+	{0x07, 0x22},  //Tracker H
+	{0x01, 0x23},  //Tracker B
+    {0x00, 0x60},  //Tracker A
+    {0x04, 0x61},  //Tracker E
+    {0x05, 0x62},  //Tracker F
+    {0x08, 0x63},  //Tracker I
+    {0x03, 0xA0},  //Tracker D
+    {0x5B, 0x21},  //Header for Tracker Threshold Increase command
+	{0x06, 0x21},  //Increase tracker threshold by 6 from base
     {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command
 	{0x08, 0x21},  //8 Layers
+    {0x57, 0x21},  //Header for Event PSOC Housekeeping command
+	{0x05, 0x21},  //5 sec Rate
     {0x03, 0x20},  //Read Errors
     {0x48, 0x21},  //Header for FPGA Input timing calibration
 	{0x08, 0x21},  //All FPGA. This command should be last since it currently takes time
