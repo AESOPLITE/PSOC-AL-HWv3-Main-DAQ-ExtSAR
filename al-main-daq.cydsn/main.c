@@ -30,6 +30,7 @@
  * V2.6 Change UART HR to use DMA instead of software buffer 
  * V2.7 Init tracker to use new tracker trigger cable 
  * V2.8 Init commands for new v23 Event PSOC with housekeeping
+ * V3.0 Add RTC seqence at startup to read i2c and set Main + Event
  *
  * ========================================
 */
@@ -41,8 +42,8 @@
 #include "math.h"
 #include "errno.h"
 
-#define MAJOR_VERSION 2 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 8 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
+#define MINOR_VERSION 0 //LSB of version, changes every commited revision, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -463,7 +464,8 @@ uint8 buffI2CRead, buffI2CWrite;
 uint8 numI2CRetry = 0;
 
 
-RTC_Main_TIME_DATE* mainTimeDate;
+RTC_Main_TIME_DATE mainTimeDate;// Structure for a local copy of RTC values, not updated by RTC
+RTC_Main_TIME_DATE* mainTimeDateSysPtr;// Structure for a local copy of RTC values, not updated by RTC
 
 uint8 rtcStatus; 
 #define RTS_SET_MAIN        (0x01)
@@ -930,18 +932,18 @@ FmBufferIndex InitFrameBuffer()
 uint8 InitRTC()
 {
 //    mainTimeDate = RTC_Main_ReadTime(); //TODO dont write to the read loactiion, create temp structure
-    RTC_Main_TIME_DATE mainTimeDateTemp; //create temp structure
-    mainTimeDateTemp.Sec = 0;
-    mainTimeDateTemp.Min = 0;
-    mainTimeDateTemp.Hour = 0;
-    mainTimeDateTemp.DayOfWeek = 1; //0 is not valid and WriteTime doesn't modify this
-    mainTimeDateTemp.DayOfMonth = MAJOR_VERSION % 30;
-    mainTimeDateTemp.DayOfYear = MAJOR_VERSION % 30;
-    mainTimeDateTemp.Month = 1;
-    mainTimeDateTemp.Year = MINOR_VERSION;
-    RTC_Main_WriteTime(&mainTimeDateTemp);
+//    RTC_Main_TIME_DATE mainTimeDateTemp; //create temp structure
+    mainTimeDate.Sec = 0;
+    mainTimeDate.Min = 0;
+    mainTimeDate.Hour = 0;
+    mainTimeDate.DayOfWeek = 1; //0 is not valid and WriteTime doesn't modify this
+    mainTimeDate.DayOfMonth = MAJOR_VERSION % 30;
+    mainTimeDate.DayOfYear = MAJOR_VERSION % 30;
+    mainTimeDate.Month = 1;
+    mainTimeDate.Year = MINOR_VERSION;
+    RTC_Main_WriteTime(&mainTimeDate);
     RTC_Main_Start();
-    return mainTimeDate->Year;
+    return mainTimeDate.Year;
 }
 uint8 InitHKBuffer()
 {
@@ -1015,9 +1017,10 @@ uint8 CheckHKBuffer()
             buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF;
         }
         RTC_Main_DisableInt();
-        mainTimeDate = RTC_Main_ReadTime();
+        mainTimeDateSysPtr = RTC_Main_ReadTime();
+        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
         RTC_Main_EnableInt();
-        temp32 = 60 * ( ( 60 * mainTimeDate->Hour) + mainTimeDate->Min ) + mainTimeDate->Sec; // Convert RTC to secs
+        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
         i=3; //32bit
 //        i=2; //24bit for Counter1 style packet DEBUG
         buffHK[buffHKWrite].secs[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
@@ -1538,15 +1541,14 @@ uint8 CheckRTC()
             }   
             else
             {
-                
-                mainTimeDate->Sec = BCD2Dec(dataRTCI2C[1] & 0x7F);
-                mainTimeDate->Min = BCD2Dec(dataRTCI2C[2] & 0x7F);
-                mainTimeDate->Hour = BCD2Dec(dataRTCI2C[3] & 0x1F);
-//                mainTimeDate->DayOfWeek = (dataRTCI2C[4] & 0x07); //0 is not valid and WriteTime doesn't modify this
-                mainTimeDate->DayOfMonth = BCD2Dec(dataRTCI2C[5] & 0x3F);
-                mainTimeDate->Month = BCD2Dec(dataRTCI2C[6] & 0x1F);
-                mainTimeDate->Year = BCD2Dec(dataRTCI2C[7]) + 2000;
-                RTC_Main_WriteTime(mainTimeDate);
+                mainTimeDate.Sec = BCD2Dec(dataRTCI2C[1] & 0x7F);
+                mainTimeDate.Min = BCD2Dec(dataRTCI2C[2] & 0x7F);
+                mainTimeDate.Hour = BCD2Dec(dataRTCI2C[3] & 0x1F);
+//                mainTimeDate.DayOfWeek = (dataRTCI2C[4] & 0x07); //0 is not valid and WriteTime doesn't modify this
+                mainTimeDate.DayOfMonth = BCD2Dec(dataRTCI2C[5] & 0x3F);
+                mainTimeDate.Month = BCD2Dec(dataRTCI2C[6] & 0x1F);
+                mainTimeDate.Year = BCD2Dec(dataRTCI2C[7]) + 2000;
+                RTC_Main_WriteTime(&mainTimeDate);
                 rtcStatus ^= RTS_SET_MAIN_INP;
             }
         }
@@ -1607,39 +1609,40 @@ uint8 CheckRTC()
         writeBuffCmd[tmpOrder] = WRAP(writeBuffCmd[tmpOrder] + 11, CMD_BUFFER_SIZE);
         CyExitCriticalSection(intState);
         RTC_Main_DisableInt();
-        mainTimeDate = RTC_Main_ReadTime();
+        mainTimeDateSysPtr = RTC_Main_ReadTime();
+        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// make local copy before changes
         RTC_Main_EnableInt();
         buffCmd[tmpOrder][tmpWrite][0] = 0x45; //Set RTC command
         buffCmd[tmpOrder][tmpWrite][1] = 0xA2; //8 Address, 10 bytes
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->Sec; //Sec
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.Sec; //Sec
         buffCmd[tmpOrder][tmpWrite][1] = 0x21; //byte #1
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->Min; //Min
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.Min; //Min
         buffCmd[tmpOrder][tmpWrite][1] = 0x22; //byte #2
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->Hour; //Hour
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.Hour; //Hour
         buffCmd[tmpOrder][tmpWrite][1] = 0x23; //byte #3
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->DayOfWeek; //DayOfWeek
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.DayOfWeek; //DayOfWeek
         buffCmd[tmpOrder][tmpWrite][1] = 0x60; //byte #4
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->DayOfMonth; //DayOfMonth
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.DayOfMonth; //DayOfMonth
         buffCmd[tmpOrder][tmpWrite][1] = 0x61; //byte #5
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*)(((uint8*) &(mainTimeDate->DayOfYear)) + 1)); //DayOfYear MSB Little endian to Big endian conversion in the precomplier
+        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*)(((uint8*) &(mainTimeDate.DayOfYear)) + 1)); //DayOfYear MSB Little endian to Big endian conversion in the precomplier
         buffCmd[tmpOrder][tmpWrite][1] = 0x62; //byte #6
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*) &(mainTimeDate->DayOfYear)); //DayOfYear LSB Little endian to Big endian conversion in the precomplier
+        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*) &(mainTimeDate.DayOfYear)); //DayOfYear LSB Little endian to Big endian conversion in the precomplier
         buffCmd[tmpOrder][tmpWrite][1] = 0x63; //byte #7
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate->Month; //DayOfMonth
+        buffCmd[tmpOrder][tmpWrite][0] = mainTimeDate.Month; //DayOfMonth
         buffCmd[tmpOrder][tmpWrite][1] = 0xA0; //byte #8
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*)(((uint8*) &(mainTimeDate->Year)) + 1)); //DayOfYear MSB Little endian to Big endian conversion in the precomplier
+        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*)(((uint8*) &(mainTimeDate.Year)) + 1)); //DayOfYear MSB Little endian to Big endian conversion in the precomplier
         buffCmd[tmpOrder][tmpWrite][1] = 0xA1; //byte #9
         tmpWrite = WRAPINC(tmpWrite, CMD_BUFFER_SIZE);
-        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*) &(mainTimeDate->Year)); //DayOfYear LSB Little endian to Big endian conversion in the precomplier
+        buffCmd[tmpOrder][tmpWrite][0] = *((uint8*) &(mainTimeDate.Year)); //DayOfYear LSB Little endian to Big endian conversion in the precomplier
         buffCmd[tmpOrder][tmpWrite][1] = 0xA2; //byte #10
 
         rtcStatus ^= RTS_SET_EVENT;
@@ -2345,10 +2348,30 @@ int main(void)
     InitHKBuffer();
     DMAHRDataChan  = DMA_HR_Data_DmaInitialize(DMA_HR_Data_BYTES_PER_BURST, DMA_HR_Data_REQUEST_PER_BURST, HI16(DMA_HR_Data_SRC_BASE), HI16(DMA_HR_Data_DST_BASE)); //keep this high rate channel for UART
     
-    CyDelay(7000); //7 sec delay for boards to init TODO Debug
+//    CyDelay(7000); //7 sec delay for boards to init TODO Debug
 
     I2C_RTC_MasterClearStatus();
-    rtcStatus = 0x00; //changing flags in this will change startup behavior of RTCs
+    rtcStatus = RTS_SET_MAIN; //changing flags in this will change startup behavior of RTCs
+    
+    do  //get set RTC Main
+    {
+        CheckRTC();//needed to process RTC
+        CheckI2C();//needed to process RTC
+    }while(0 != rtcStatus) ;
+    rtcStatus = RTS_SET_EVENT; //changing flags in this will change startup behavior of RTCs
+    
+    do  //get set RTC Event
+    {
+        CheckRTC();//needed to process RTC
+        CheckCmdBuffers();//needed to process RTC
+    }while(0 != rtcStatus) ;
+    
+    while(readBuffCmd[0] != writeBuffCmd[0]) //Finish all commands
+    {
+        CheckCmdBuffers();//needed to process RTC
+    };
+    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));
+    writeBuffCmd[0] = NUMBER_INIT_CMDS;
 	for(;;)
 	{
 		
