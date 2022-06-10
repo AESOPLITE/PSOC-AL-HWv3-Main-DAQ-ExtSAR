@@ -30,7 +30,7 @@
  * V2.6 Change UART HR to use DMA instead of software buffer 
  * V2.7 Init tracker to use new tracker trigger cable 
  * V2.8 Init commands for new v23 Event PSOC with housekeeping
- * V3.0 Add RTC seqence at startup to read i2c and set Main + Event
+ * V3.0 Add RTC sequence at startup to read i2c and set Main + Event
  *
  * ========================================
 */
@@ -1590,6 +1590,19 @@ uint8 CheckRTC()
     {
         curRTSI2CTrans = buffI2CWrite;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+        
+        RTC_Main_DisableInt();
+        mainTimeDateSysPtr = RTC_Main_ReadTime();
+        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// make local copy before changes
+        RTC_Main_EnableInt();
+        
+        dataRTCI2C[1] = (Dec2BCD(mainTimeDate.Sec) & 0x7F) | 0x80; //0x80 enables Oscillator
+        dataRTCI2C[2] = Dec2BCD(mainTimeDate.Min) & 0x7F;
+        dataRTCI2C[3] = Dec2BCD(mainTimeDate.Hour) & 0x3F;
+        dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x80); //DayOfWeek starts at 1. 0x80 enables external battery
+        dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth )& 0x3F;
+        dataRTCI2C[6] = Dec2BCD(mainTimeDate.Month) & 0x1F;
+        dataRTCI2C[7] = Dec2BCD((uint8)(mainTimeDate.Year % 100));
         
         buffI2C[curRTSI2CTrans].type = I2C_WRITE;
         buffI2C[curRTSI2CTrans].slaveAddress = I2C_Address_RTC;
