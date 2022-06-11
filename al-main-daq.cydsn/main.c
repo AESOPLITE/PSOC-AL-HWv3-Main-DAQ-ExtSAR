@@ -1599,7 +1599,7 @@ uint8 CheckRTC()
         dataRTCI2C[1] = (Dec2BCD(mainTimeDate.Sec) & 0x7F) | 0x80; //0x80 enables Oscillator
         dataRTCI2C[2] = Dec2BCD(mainTimeDate.Min) & 0x7F;
         dataRTCI2C[3] = Dec2BCD(mainTimeDate.Hour) & 0x3F;
-        dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x80); //DayOfWeek starts at 1. 0x80 enables external battery
+        dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x08); //DayOfWeek starts at 1. 0x08 enables external battery
         dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth )& 0x3F;
         dataRTCI2C[6] = Dec2BCD(mainTimeDate.Month) & 0x1F;
         dataRTCI2C[7] = Dec2BCD((uint8)(mainTimeDate.Year % 100));
@@ -2243,8 +2243,8 @@ int main(void)
     {
         orderBuffCmd[i] = i; //read the cmd buff in order
     }
-    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));
-    writeBuffCmd[0] = NUMBER_INIT_CMDS;
+//    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));
+//    writeBuffCmd[0] = NUMBER_INIT_CMDS;
 //    memcpy(&buffCmd[1][0][0], initCmd, (NUMBER_INIT_CMDS * 2));
 //    writeBuffCmd[1] = NUMBER_INIT_CMDS;
     
@@ -2370,21 +2370,22 @@ int main(void)
     {
         CheckRTC();//needed to process RTC
         CheckI2C();//needed to process RTC
-    }while(0 != rtcStatus) ;
+    }while(0 != rtcStatus) ;//Main RTC Set TODO Timeout
     rtcStatus = RTS_SET_EVENT; //changing flags in this will change startup behavior of RTCs
+    CyDelay(7000); //7 sec delay for boards to init TODO Debug
     
     do  //get set RTC Event
     {
         CheckRTC();//needed to process RTC
         CheckCmdBuffers();//needed to process RTC
-    }while(0 != rtcStatus) ;
+    }while(0 != rtcStatus) ;//Event RTC commands issued TODO Timeout
     
-    while(readBuffCmd[0] != writeBuffCmd[0]) //Finish all commands
+    while(readBuffCmd[0] != writeBuffCmd[0]) //Finish all commands TODO Timeout
     {
         CheckCmdBuffers();//needed to process RTC
     };
-    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));
-    writeBuffCmd[0] = NUMBER_INIT_CMDS;
+    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));// load all the init commands into 0 buffer
+    writeBuffCmd[0] = NUMBER_INIT_CMDS;// set 0 buffer to the number of commands
 	for(;;)
 	{
 		
