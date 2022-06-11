@@ -31,6 +31,7 @@
  * V2.7 Init tracker to use new tracker trigger cable 
  * V2.8 Init commands for new v23 Event PSOC with housekeeping
  * V3.0 Add RTC sequence at startup to read i2c and set Main + Event
+ * V3.1 Changed init commands are copied after RTC. Tuned the RTC seq start delay
  *
  * ========================================
 */
@@ -43,7 +44,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 0 //LSB of version, changes every commited revision, able to readout in 1 byte
+#define MINOR_VERSION 1 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -52,7 +53,7 @@
 #define WRAPDEC(a,b) ((a + ((b) - 1)) % (b))
 #define WRAP(a,b) ((a) % (b)) //Macro to bring new calculated index a into the bounds of a circular buffer of size b
 #define ISELEMENTDONE(a,b,c) ((b <= c) ? ((a < b) || (a >= c)) : ((a < b) && (a >= c)) )//used to determin if element in circular buffer is done 
-#define ACTIVELEN(a,b,c) ((((c) - (a)) + (b)) % (c)) //Macro to calculate active length in a circular buffer. Exclusive, need to add 1 to make inclusive
+#define ACTIVELEN(a,b,c) ((((c) - (a)) + (b)) % (c)) //Macro to calculate active length between a and b in circular buffer of size c. Exclusive, need to add 1 to make inclusive
 // From LROA103.ASM
 //;The format for the serial command is:
 //; S1234<sp>xyWS1234<sp>xyWS1234<sp>xyW<cr><lf>
@@ -628,30 +629,29 @@ int SendCmdString (uint8 * in)
 	return 0;
 }
 
-void SendInitCmds()
+int SendInitCmds()
 {
-	int i = 0;
-	CyDelay(7000); //7 sec delay for boards to init TODO Debug
-	while (i < NUMBER_INIT_CMDS)
-	{
-        int8 convResult = CmdBytes2String(initCmd[i], curCmd);
-        if (4 == convResult)
-        {
-		    if (0 == SendCmdString(curCmd)) i++; //, TRUE)) i++;
-        }
-        else 
-        {
-            //TODO error handling and counting
-            i++;   
-        }
-//        if (i > 24)
-//        {
-//            memcpy(buffUsbTxDebug, curCmd, COMMAND_CHARS);
-//        	iBuffUsbTxDebug += 4;
-//            buffUsbTxDebug[iBuffUsbTxDebug++] = '\n';
-//        }
-//		CyDelay(1000); //TODO Debug
-	}
+    if (CMD_BUFFER_SIZE <= (ACTIVELEN(readBuffCmd[0], writeBuffCmd[0], CMD_BUFFER_SIZE) + NUMBER_INIT_CMDS)) //check if space for commands
+    {
+        //TODO error log
+        return -ENOMEM;
+    }
+	uint8 tempNumCmdLeft = NUMBER_INIT_CMDS;
+	uint8 tempNumCmdPart = 0;
+    uint8 intState = CyEnterCriticalSection();
+    uint8 tempWrite = writeBuffCmd[0];
+    writeBuffCmd[0] = WRAP(writeBuffCmd[0] + NUMBER_INIT_CMDS, CMD_BUFFER_SIZE);
+    CyExitCriticalSection(intState);
+	if(CMD_BUFFER_SIZE <= (tempWrite + tempNumCmdLeft))
+    {
+        tempNumCmdPart = CMD_BUFFER_SIZE - tempWrite; //commands to end of buffer
+        memcpy(&buffCmd[0][tempWrite][0], initCmd, (tempNumCmdPart * 2));// load all the init commands into 0 buffer
+        tempNumCmdLeft -= tempNumCmdPart;//reduce commands left
+        tempWrite = 0;//start begining of buffer
+    }
+    memcpy(&buffCmd[0][tempWrite][0], initCmd + (tempNumCmdPart * 2), (tempNumCmdLeft * 2));// load all the init commands into 0 buffer
+    
+    return NUMBER_INIT_CMDS;
 }
 
 int SendLRScienceData()
@@ -701,16 +701,19 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
                 int tempRes = CmdBytes2String(cmdRxC[i], curCmd);
                 if(tempRes >= 0)
                 {
-                    tempRes = SendCmdString(curCmd);  //TODO change this with considerations for commands like RTC set and duplicates
-                    if (-EBUSY == tempRes)
-                    {
-                        memcpy(buffCmd[i][writeBuffCmd[i]], cmdRxC[i], 2); //busy queue for later
-                        writeBuffCmd[i] = WRAPINC(writeBuffCmd[i], CMD_BUFFER_SIZE);
-                    }
-                    else if (tempRes < 0)
-                    {
-                        //TODO Error handling
-                    }
+//                    tempRes = SendCmdString(curCmd);  //TODO change this with considerations for commands like RTC set and duplicates
+//                    if (-EBUSY == tempRes)
+//                    {
+                    uint8 intState = CyEnterCriticalSection();
+                    uint8 tempWrite = writeBuffCmd[i];
+                    writeBuffCmd[i] = WRAPINC(writeBuffCmd[i], CMD_BUFFER_SIZE);
+                    CyExitCriticalSection(intState);
+                    memcpy(buffCmd[i][tempWrite], cmdRxC[i], 2); //queue for later
+//                    }
+//                    else if (tempRes < 0)
+//                    {
+//                        //TODO Error handling
+//                    }
                 }
             }
             else 
@@ -734,88 +737,88 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
     return 0;
 }
 
-int CheckCmdDma(uint8 chanSrc)
-{
-   
-    uint8 tempRx;
-    int16 buffNewReadLen = *buffCmdRxCWritePtr[0] - LO16((uint32)buffCmdRxC[chanSrc]);
-//    buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
-    buffNewReadLen -= buffCmdRxCRead[chanSrc];
-    if (buffNewReadLen < 0) buffNewReadLen += DMA_LR_Cmd_1_BUFFER_SIZE;
-//    buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
-    
-    if(TRUE)
-    {
-        
-        while(buffNewReadLen-- > 1)   
-        {
-            buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
-            buffCmdRxCRead[chanSrc] = WRAPINC(buffCmdRxCRead[chanSrc], DMA_LR_Cmd_1_BUFFER_SIZE);
-            tempRx = buffCmdRxC[chanSrc][buffCmdRxCRead[chanSrc]];  
-            buffUsbTxDebug[iBuffUsbTxDebug++] = tempRx; //debug
-            switch(commandStatusC[chanSrc])
-            {
-                case WAIT_DLE:
-                    if (DLE == tempRx) commandStatusC[chanSrc] = CHECK_ID;
-                    break;
-                case CHECK_ID:
-                    if (CMD_ID == tempRx) commandStatusC[chanSrc] = CHECK_LEN;
-                    if (REQ_ID == tempRx) commandStatusC[chanSrc] = CHECK_ETX_REQ;
-                    break;
-                case CHECK_LEN:
-                    if(2 == tempRx){
-                        commandLenC[chanSrc] = tempRx;
-                        commandStatusC[chanSrc] = READ_CMD;
-                    }
-                    else commandStatusC[chanSrc] = WAIT_DLE;
-                    break;
-                case READ_CMD:
-                    if(commandLenC[0] > 0)
-                    {
-                        cmdRxC[chanSrc][commandLenC[chanSrc] % 2] = tempRx;
-                        commandLenC[0]--;
-//                        buffUsbTxDebug[iBuffUsbTxDebug++] = commandLenC[0]; //debug
-                        if(0 == commandLenC[chanSrc])  commandStatusC[chanSrc]= CHECK_ETX_CMD;
-                    }
-                    
-                    break;
-                case CHECK_ETX_CMD:
-                    if (ETX == tempRx)
-                    {
-                        
-                        int tempRes = CmdBytes2String(cmdRxC[chanSrc], curCmd);
-                        if(tempRes >= 0)
-                        {
-                            tempRes = SendCmdString(curCmd);  
-                            if (-EBUSY == tempRes)
-                            {
-                                memcpy(buffCmd[chanSrc][writeBuffCmd[chanSrc]], cmdRxC[chanSrc], 2); //busy queue for later
-                                writeBuffCmd[chanSrc] = WRAPINC(writeBuffCmd[chanSrc], CMD_BUFFER_SIZE);
-                            }
-                            else if (tempRes < 0)
-                            {
-                                //TODO Error handling
-                            }
-                        }
-                    }
-                    else 
-                    {
-                        //TODO error
-                    }
-                    commandStatusC[chanSrc] = WAIT_DLE;
-                    break;
-                case CHECK_ETX_REQ:
-                    if (ETX == tempRx)
-                    {    
-                        SendLRScienceData();
-                    }
-                    break;
-            }
-                
-        }
-    }
-    return 0;
-}
+//int CheckCmdDma(uint8 chanSrc)
+//{
+//   
+//    uint8 tempRx;
+//    int16 buffNewReadLen = *buffCmdRxCWritePtr[0] - LO16((uint32)buffCmdRxC[chanSrc]);
+////    buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
+//    buffNewReadLen -= buffCmdRxCRead[chanSrc];
+//    if (buffNewReadLen < 0) buffNewReadLen += DMA_LR_Cmd_1_BUFFER_SIZE;
+////    buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
+//    
+//    if(TRUE)
+//    {
+//        
+//        while(buffNewReadLen-- > 1)   
+//        {
+//            buffUsbTxDebug[iBuffUsbTxDebug++] = buffNewReadLen & 255; //debug
+//            buffCmdRxCRead[chanSrc] = WRAPINC(buffCmdRxCRead[chanSrc], DMA_LR_Cmd_1_BUFFER_SIZE);
+//            tempRx = buffCmdRxC[chanSrc][buffCmdRxCRead[chanSrc]];  
+//            buffUsbTxDebug[iBuffUsbTxDebug++] = tempRx; //debug
+//            switch(commandStatusC[chanSrc])
+//            {
+//                case WAIT_DLE:
+//                    if (DLE == tempRx) commandStatusC[chanSrc] = CHECK_ID;
+//                    break;
+//                case CHECK_ID:
+//                    if (CMD_ID == tempRx) commandStatusC[chanSrc] = CHECK_LEN;
+//                    if (REQ_ID == tempRx) commandStatusC[chanSrc] = CHECK_ETX_REQ;
+//                    break;
+//                case CHECK_LEN:
+//                    if(2 == tempRx){
+//                        commandLenC[chanSrc] = tempRx;
+//                        commandStatusC[chanSrc] = READ_CMD;
+//                    }
+//                    else commandStatusC[chanSrc] = WAIT_DLE;
+//                    break;
+//                case READ_CMD:
+//                    if(commandLenC[0] > 0)
+//                    {
+//                        cmdRxC[chanSrc][commandLenC[chanSrc] % 2] = tempRx;
+//                        commandLenC[0]--;
+////                        buffUsbTxDebug[iBuffUsbTxDebug++] = commandLenC[0]; //debug
+//                        if(0 == commandLenC[chanSrc])  commandStatusC[chanSrc]= CHECK_ETX_CMD;
+//                    }
+//                    
+//                    break;
+//                case CHECK_ETX_CMD:
+//                    if (ETX == tempRx)
+//                    {
+//                        
+//                        int tempRes = CmdBytes2String(cmdRxC[chanSrc], curCmd);
+//                        if(tempRes >= 0)
+//                        {
+//                            tempRes = SendCmdString(curCmd);  
+//                            if (-EBUSY == tempRes)
+//                            {
+//                                memcpy(buffCmd[chanSrc][writeBuffCmd[chanSrc]], cmdRxC[chanSrc], 2); //busy queue for later
+//                                writeBuffCmd[chanSrc] = WRAPINC(writeBuffCmd[chanSrc], CMD_BUFFER_SIZE);
+//                            }
+//                            else if (tempRes < 0)
+//                            {
+//                                //TODO Error handling
+//                            }
+//                        }
+//                    }
+//                    else 
+//                    {
+//                        //TODO error
+//                    }
+//                    commandStatusC[chanSrc] = WAIT_DLE;
+//                    break;
+//                case CHECK_ETX_REQ:
+//                    if (ETX == tempRx)
+//                    {    
+//                        SendLRScienceData();
+//                    }
+//                    break;
+//            }
+//                
+//        }
+//    }
+//    return 0;
+//}
 
 int CheckCmdBuffers()
 {
@@ -1616,9 +1619,14 @@ uint8 CheckRTC()
     else if (0 != (rtcStatus & RTS_SET_EVENT))
     {
         uint8 tmpOrder = orderBuffCmd[0];
-        uint8 tmpWrite = writeBuffCmd[tmpOrder];
+        if (CMD_BUFFER_SIZE <= (ACTIVELEN(readBuffCmd[tmpOrder], writeBuffCmd[tmpOrder], CMD_BUFFER_SIZE) + 11)) //check if space for commands
+        {
+            //TODO error log
+            return -ENOMEM;
+        }
         //TOD0 check that this doesn't pass read index in the command buffer
         uint8 intState = CyEnterCriticalSection();
+        uint8 tmpWrite = writeBuffCmd[tmpOrder];
         writeBuffCmd[tmpOrder] = WRAP(writeBuffCmd[tmpOrder] + 11, CMD_BUFFER_SIZE);
         CyExitCriticalSection(intState);
         RTC_Main_DisableInt();
@@ -2372,7 +2380,7 @@ int main(void)
         CheckI2C();//needed to process RTC
     }while(0 != rtcStatus) ;//Main RTC Set TODO Timeout
     rtcStatus = RTS_SET_EVENT; //changing flags in this will change startup behavior of RTCs
-    CyDelay(7000); //7 sec delay for boards to init TODO Debug
+    CyDelay(500); //delay for boards to init TODO Debug
     
     do  //get set RTC Event
     {
@@ -2384,8 +2392,7 @@ int main(void)
     {
         CheckCmdBuffers();//needed to process RTC
     };
-    memcpy(&buffCmd[0][0][0], initCmd, (NUMBER_INIT_CMDS * 2));// load all the init commands into 0 buffer
-    writeBuffCmd[0] = NUMBER_INIT_CMDS;// set 0 buffer to the number of commands
+    SendInitCmds();
 	for(;;)
 	{
 		
