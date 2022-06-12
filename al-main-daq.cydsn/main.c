@@ -31,7 +31,8 @@
  * V2.7 Init tracker to use new tracker trigger cable 
  * V2.8 Init commands for new v23 Event PSOC with housekeeping
  * V3.0 Add RTC sequence at startup to read i2c and set Main + Event
- * V3.1 Changed init commands are copied after RTC. Tuned the RTC seq start delay
+ * V3.1 Changed how init commands are copied after RTC. Tuned the RTC seq start delay
+ * V3.2 Changed init commands and reordered for flight prep
  *
  * ========================================
 */
@@ -44,7 +45,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 1 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 2 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -294,58 +295,52 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(6 + 42 + 92)
+#define NUMBER_INIT_CMDS	(42 + 83 + 5 + 6 + 2 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
-	{0xAF, 0x35}, //T1 1500.2V High Voltage
-	{0xD0, 0x36}, //T2 1751
-	{0xCA, 0x37}, //T3 1704.7
-	{0xBF, 0xB5}, //T4 1603.7
-	{0xD1, 0x74}, //G  1757
-	{0x0A, 0xB6},  //10sec Power R/O
-    // event PSOC DAC Trigger Setup
-	{0x04, 0x23},  //Header for ToF DAC
+    //Event PSOC DAQ Trigger Setup
+	{0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x01, 0x21},  //Channel ToF 1 
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x40, 0x23},  //DAC Byte LSB
-    {0x04, 0x23},  //Header for ToF DAC
+	{0x40, 0x23},  //64 DAC Byte LSB
+    {0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x02, 0x21},  //Channel ToF 2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x40, 0x23},  //DAC Byte LSB
+	{0x40, 0x23},  //64 DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
-	{0x05, 0x21},  //Channel 5
-	{0x0F, 0x22},  //DAC Byte MSB
-	{0xA0, 0x23},  //DAC Byte LSB
+	{0x05, 0x21},  //Channel 5 T2
+	{0x00, 0x22},  //DAC Byte MSB
+	{0x14, 0x23},  //20 DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
-	{0x06, 0x22},  //DAC Byte
+	{0x06, 0x22},  //6 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0x06, 0x22},  //DAC Byte
+	{0x06, 0x22},  //6 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x0B, 0x22},  //DAC Byte
+	{0x0B, 0x22},  //11 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x08, 0x22},  //DAC Byte    
+	{0x08, 0x22},  //8 DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
-	{0x01, 0x21},  //Mask 1 
-	{0x04, 0x22},  //Trigger Mask 04 T1 T3 T4
-    {0x39, 0x22},  //Header for Trigger Prescale Set
-    {0x02, 0x21},  //PMT
-	{0x01, 0x22},  //Prescale by 1     
-    {0x39, 0x22},  //Header for Trigger Prescale Set
-    {0x01, 0x21},  //Tracker
-	{0x04, 0x22},  //Prescale by 4 
-    {0x3A, 0x21},  //Header for Trigger Window Set
-    {0x30, 0x21},  //Trigger Window Data
+	{0x01, 0x21},  //1 Mask Primary 
+	{0x02, 0x22},  //Trigger Mask 02 T1 T2 T4
     {0x36, 0x22},  //Header for Trigger Mask Set
-    {0x02, 0x21},  //Mask 2 
+    {0x02, 0x21},  //2 Mask Secondary 
 	{0x06, 0x22},  //Trigger Mask 06 T1 T4
-    {0x30, 0x21},  //Header for Output Mode Set
-	{0x00, 0x21},  //0 SPI output 
-    {0x4F, 0x21},  //Header for PMT Trigger Delay command
-	{0x0C, 0x21},  //12 cylce delay 
-    // event Tracker Setup
+    {0x39, 0x22},  //Header for Trigger Prescale Set
+    {0x01, 0x21},  //1 Tracker
+	{0x04, 0x22},  //Prescale by 4 
+    {0x39, 0x22},  //Header for Trigger Prescale Set
+    {0x02, 0x21},  //2 PMT
+	{0x01, 0x22},  //Prescale by 1     
+    {0x3A, 0x21},  //Header for Trigger Window Settling Time Set
+    {0x30, 0x21},  //Settling Time 48. Default 24 TODO Tune
+    {0x4B, 0x21},  //Header for Peak Detector Charge Time Set
+	{0x20, 0x21},  //32 cycle delay. Default 32 TODO Tune
+    {0x4F, 0x21},  //Header for PMT Tracker Trigger Delay Set
+	{0x0C, 0x21},  //12 cycle delay 
+    //Event PSOC Tracker Setup
 	{0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //0 ID
 	{0x04, 0x22},  //Reset FPGA
@@ -425,19 +420,28 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x05, 0x62},  //Tracker F
     {0x08, 0x63},  //Tracker I
     {0x03, 0xA0},  //Tracker D
-    {0x5B, 0x21},  //Header for Tracker Threshold Increase command
-	{0x06, 0x21},  //Increase tracker threshold by 6 from base
-    {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command
-	{0x08, 0x21},  //8 Layers
-    {0x10, 0x23},  //Header for Tracker command
-	{0x00, 0x21},  //0 ID
-	{0x65, 0x22},  //Trigger Enable
-	{0x00, 0x23},  //0 data bytes
-    {0x57, 0x21},  //Header for Event PSOC Housekeeping command
+    {0x5B, 0x21},  //Header for Tracker Threshold Increase command. Only gets loaded by 0x56 command 
+	{0x06, 0x21},  //Increase tracker threshold by 6
+    {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command. This command takes time so prefer not to issue an Event PSOC command after
+	{0x08, 0x21},  //8 Layers. This command takes time so prefer not to issue an Event PSOC command after
+    //HV Control Board Setup. Placed here to prevent Event PSOC command following 0x56 command 
+	{0xAF, 0x35}, //T1 1500V High Voltage
+	{0xD0, 0x36}, //T2 1751V High Voltage
+	{0xCA, 0x37}, //T3 1705V High Voltage
+	{0xBF, 0xB5}, //T4 1603V High Voltage
+	{0xD1, 0x74}, //G  1757V High Voltage
+    //Event PSOC Housekeeping Setup
+    {0x57, 0x22},  //Header for Event PSOC Housekeeping command
 	{0x05, 0x21},  //5 sec Rate
-    {0x03, 0x20},  //Read Errors
-    {0x48, 0x21},  //Header for FPGA Input timing calibration
-	{0x08, 0x21},  //All FPGA. This command should be last since it currently takes time
+	{0x01, 0x22},  //1 Include Tracker Rate
+    {0x5C, 0x21},  //Header for Event PSOC Tracker Housekeeping command
+	{0x05, 0x21},  //5 min Rate
+    {0x03, 0x20},  //Header For Read Errors. Init errors proir to this will be sent & cleared
+	//Startup FPGA Input Timing Calibration
+    {0x48, 0x21},  //Header for FPGA Input Timing Calibration
+	{0x08, 0x21},  //All FPGA. This command takes time so prefer not to issue an Event PSOC command after
+    //Power Board Setup. Placed here to prevent a newly issued Event PSOC command from following 0x48 command 
+	{0x0A, 0xB6},  //10sec Power R/O
     }; //End init cmds
 #define CMD_BUFFER_SIZE 256 // max value for index since init commands is getting longer than half buffer (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
 uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];
@@ -2380,7 +2384,7 @@ int main(void)
         CheckI2C();//needed to process RTC
     }while(0 != rtcStatus) ;//Main RTC Set TODO Timeout
     rtcStatus = RTS_SET_EVENT; //changing flags in this will change startup behavior of RTCs
-    CyDelay(500); //delay for boards to init TODO Debug
+    CyDelay(500); //half sec delay for boards to init TODO Debug
     
     do  //get set RTC Event
     {
