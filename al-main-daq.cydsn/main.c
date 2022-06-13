@@ -33,6 +33,7 @@
  * V3.0 Add RTC sequence at startup to read i2c and set Main + Event
  * V3.1 Changed how init commands are copied after RTC. Tuned the RTC seq start delay
  * V3.2 Changed init commands and reordered for flight prep
+ * V3.3 Housekeeping format change to new format from mock Counter1. Disabled command isr till init   
  *
  * ========================================
 */
@@ -45,7 +46,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 2 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 3 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -212,16 +213,49 @@ uint16 seqFrame2HB = 0; //2 Highest bytes of the frame seq (seqH & seqM) the seq
 //	uint8 padding[HK_PAD_SIZE];
 //	uint8 EOR[3];
 //} HousekeepingPeriodic;
+//typedef struct HousekeepingPeriodic {// swaped pres and temperature for debug
+//	uint8 header[3];
+//	uint8 version[2];
+//	uint8 secs[4];
+//	uint8 paddingTemp[21];
+//	uint8 baroPres1[3];
+//	uint8 baroTemp1[3];
+//	uint8 baroPres2[3];
+//    uint8 baroTemp2[3];
+//	uint8 padding[HK_PAD_SIZE];
+//	uint8 EOR[3];
+//} HousekeepingPeriodic;
 typedef struct HousekeepingPeriodic {// swaped pres and temperature for debug
 	uint8 header[3];
-	uint8 version[2];
-	uint8 secs[4];
-	uint8 paddingTemp[21];
-	uint8 baroPres1[3];
-	uint8 baroTemp1[3];
-	uint8 baroPres2[3];
-    uint8 baroTemp2[3];
-	uint8 padding[HK_PAD_SIZE];
+    uint8 packedTimeDate[4];//
+    uint8 commandLast[2];//
+    uint8 commandCount[2];//
+    uint8 commandErrors[1];//
+    uint8 generalErrors[1];//
+    uint8 missingValuesThisPacket[1];//
+    uint8 fifoPercentFull[1];//0-100
+    uint8 framesDroppedRS232[2];//
+    uint8 framesDroppedUSB[2];//
+	uint8 baroPres1[4];
+	uint8 baroTemp1[4];
+	uint8 baroPres2[4];
+    uint8 baroTemp2[4];
+    uint8 baroPres3[3];//I2C Address 1110000
+    uint8 baroTemp3[3];//I2C Address 1110000
+    uint8 boardTemperature[2];//I2C Address 1001000
+    uint8 coreDieTemp[2];//
+    uint8 digital3VVoltage[2];//I2C Address 1000100
+    uint8 digital3VAmperage[2];//I2C Address 1000100
+    uint8 analog3VVoltage[2];//I2C Address 1000011
+    uint8 analog3VAmperage[2];//I2C Address 1000011
+    uint8 digital5VVoltage[2];//I2C Address 1000001
+    uint8 digital5VAmperage[2];//I2C Address 1000001
+    uint8 analog5VVoltage[2];//I2C Address 1000101
+    uint8 analog5VAmperage[2];//I2C Address 1000101
+    uint8 digital15VVoltage[2];//I2C Address 1000010
+    uint8 trackerVoltage[2];//I2C Address 1000000
+    uint8 trackerAmperage[2];//I2C Address 1000000
+    uint8 trackerBiasVoltage[2];//I2C Address 1000110
 	uint8 EOR[3];
 } HousekeepingPeriodic;
 
@@ -229,7 +263,8 @@ HousekeepingPeriodic buffHK[HK_BUFFER_PACKETS];
 uint8 buffHKRead = 0;
 uint8 buffHKWrite = 0;
 
-#define HK_HEAD	(0xF8u) //usign counter1 for main PSOC hk right now DEBUG
+#define HK_HEAD	(0xD0u) //ID for Main PSOC Housekeeping
+//#define HK_HEAD	(0xF8u) //usign counter1 for main PSOC hk right now DEBUG
 
 //#define COUNTER_PACKET_BYTES	(45u)
 
@@ -959,11 +994,11 @@ uint8 InitHKBuffer()
     {
         buffHK[initHK].header[0] = HK_HEAD;
         memcpy(buffHK[initHK].header + 1, frame00FF, 2);
-        buffHK[initHK].version[0] = MAJOR_VERSION;
-        buffHK[initHK].version[1] = MINOR_VERSION;
+//        buffHK[initHK].version[0] = MAJOR_VERSION;
+//        buffHK[initHK].version[1] = MINOR_VERSION;
         buffHK[initHK].EOR[0] = EOR_HEAD;
         memcpy(buffHK[initHK].EOR + 1, frame00FF, 2);
-        memset(buffHK[initHK].padding, 0, HK_PAD_SIZE);
+//        memset(buffHK[initHK].padding, 0, HK_PAD_SIZE);
         initHK++;
         
     }
@@ -974,10 +1009,9 @@ uint8 CheckHKBuffer()
 {
     if (TRUE == hkCollecting) //see if collecting is done
     {
-        //checks for specific data collection
+        buffHK[buffHKWrite].missingValuesThisPacket[0] = 21;
         buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
         hkCollecting = FALSE;
-//        isr_B_SetPending();
         return 1;
     }
     else if ((TRUE == hkReq)) //see if req is made by ISRCheckBaro
@@ -988,8 +1022,8 @@ uint8 CheckHKBuffer()
         CyExitCriticalSection(intState);
         //start specific data collection
         uint32 temp32 = curBaroTempCnt[0];
-//        int8 i=3; //32bit
-        int8 i=2; //24bit for Counter1 style packet DEBUG
+//        int8 i=2; //24bit for Counter1 style packet DEBUG
+        int8 i=3; //32bit 
         buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
         while (0 <= --i) //Fill the Higher order bytes
         {
@@ -997,8 +1031,8 @@ uint8 CheckHKBuffer()
             buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF;
         }
         temp32 = curBaroPresCnt[0];
-//      i=3; //32bit
-        i=2; //24bit for Counter1 style packet DEBUG
+      i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
         buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
         while (0 <= --i) //Fill the Higher order bytes
         {
@@ -1006,8 +1040,8 @@ uint8 CheckHKBuffer()
             buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF;
         }
         temp32 = curBaroTempCnt[1];
-//        int8 i=3; //32bit
-        i=2; //24bit for Counter1 style packet DEBUG
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
         buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
         while (0 <= --i) //Fill the Higher order bytes
         {
@@ -1015,8 +1049,8 @@ uint8 CheckHKBuffer()
             buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF;
         }
         temp32 = curBaroPresCnt[1];
-//      i=3; //32bit
-        i=2; //24bit for Counter1 style packet DEBUG
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
         buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
         while (0 <= --i) //Fill the Higher order bytes
         {
@@ -1027,14 +1061,26 @@ uint8 CheckHKBuffer()
         mainTimeDateSysPtr = RTC_Main_ReadTime();
         memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
         RTC_Main_EnableInt();
-        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
+        
+        temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
+        temp32 |= mainTimeDate.Month;
+        temp32 <<= 5;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.DayOfMonth;
+        temp32 <<= 5;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Hour;
+        temp32 <<= 6;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Min;
+        temp32 <<= 6;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Sec;
+        
+//        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
         i=3; //32bit
 //        i=2; //24bit for Counter1 style packet DEBUG
-        buffHK[buffHKWrite].secs[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
         while (0 <= --i) //Fill the Higher order bytes
         {
             temp32 >>= 8;
-            buffHK[buffHKWrite].secs[i] = temp32 & 0xFF;
+            buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF;
         }
 //        uint8 buffBaroCapNumWriteTemp = buffBaroCapNumWrite; //DEBUG
 //        if (buffBaroCapNumWriteTemp )
@@ -2325,8 +2371,9 @@ int main(void)
 	isr_R_StartEx(ISRReadSPI);
 	isr_W_StartEx(ISRWriteSPI);
 //	isr_C_StartEx(ISRDrdyCap);
-	isr_Cm_StartEx(ISRCheckCmd);
 	isr_E_StartEx(ISRReadEv);
+	isr_Cm_StartEx(ISRCheckCmd);//RTC startup reads mostly 0s out when this is moved after tha sequence 
+    isr_Cm_Disable();//Init commands are not enqueued so no interrupts for more commands
 	
 	
 //	Timer_Tsync_Start();
@@ -2396,7 +2443,8 @@ int main(void)
     {
         CheckCmdBuffers();//needed to process RTC
     };
-    SendInitCmds();
+    SendInitCmds();//Enqueued all init commands
+	isr_Cm_Enable();//Since init commands are enqueued, start interrupts for more commands
 	for(;;)
 	{
 		
