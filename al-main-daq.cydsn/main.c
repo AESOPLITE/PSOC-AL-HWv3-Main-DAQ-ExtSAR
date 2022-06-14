@@ -34,6 +34,7 @@
  * V3.1 Changed how init commands are copied after RTC. Tuned the RTC seq start delay
  * V3.2 Changed init commands and reordered for flight prep
  * V3.3 Housekeeping format change to new format from mock Counter1. Disabled command isr till init   
+ * V3.4 Added Low Rate Science Data Packet just Main HK for ths version
  *
  * ========================================
 */
@@ -46,7 +47,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 3 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 4 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -225,14 +226,14 @@ uint16 seqFrame2HB = 0; //2 Highest bytes of the frame seq (seqH & seqM) the seq
 //	uint8 padding[HK_PAD_SIZE];
 //	uint8 EOR[3];
 //} HousekeepingPeriodic;
-typedef struct HousekeepingPeriodic {// swaped pres and temperature for debug
+typedef struct HousekeepingPeriodic {
 	uint8 header[3];
     uint8 packedTimeDate[4];//
     uint8 commandLast[2];//
     uint8 commandCount[2];//
-    uint8 commandErrors[1];//
-    uint8 generalErrors[1];//
-    uint8 missingValuesThisPacket[1];//
+    uint8 commandErrors;//
+    uint8 generalErrors;//
+    uint8 missingValuesThisPacket;//
     uint8 fifoPercentFull[1];//0-100
     uint8 framesDroppedRS232[2];//
     uint8 framesDroppedUSB[2];//
@@ -267,6 +268,19 @@ uint8 buffHKWrite = 0;
 //#define HK_HEAD	(0xF8u) //usign counter1 for main PSOC hk right now DEBUG
 
 //#define COUNTER_PACKET_BYTES	(45u)
+
+typedef struct LowRateHousekeeping {
+	uint8 dle;
+    uint8 scienceDataID;//
+    uint8 dataLength;//
+    uint8 mainMajorV;//
+    uint8 mainMinorV;//
+    uint8 mainHK[66];//
+    uint8 eventHK[66];//
+    uint8 etx;//
+} LowRateHousekeeping;
+
+LowRateHousekeeping lowRateHK;
 
 /* Defines for DMA_LR_Cmd_1 */
 #define DMA_LR_Cmd_1_BYTES_PER_BURST 1
@@ -522,7 +536,7 @@ uint8 dataRTCI2C[DATA_RTS_I2C_BYTES] = {
 0x00, //Min Register
 0x00, //Hour Register
 0x09, //Day Register with Batt enable and Day 1
-(MINOR_VERSION & 0x17), //Date Register, use version to produce a default value
+((MINOR_VERSION + 1) & 0x17), //Date Register, use version to produce a default value
 (MAJOR_VERSION & 0x17), //Month Register, use version to produce a default value
 0x00}; //Year Register
 
@@ -579,6 +593,7 @@ volatile uint8 cntSecs = 0; //count 1 sec interrupts for housekeeping packet rat
 uint8 hkSecs = 5; //# of secs per housekeeping packet
 volatile uint8 hkReq = FALSE; //state to request packet 
 uint8 hkCollecting = FALSE; //state to request packet 
+volatile uint8 lowRateReq = FALSE; //state to request low rate science data packet 
 
 
 //const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 1.0, .Y1 = 1.0, .Y2 = 1.0, .Y3 = 1.0, .C1 = 1.0, .C2 = 1.0, .C3 = 1.0, .D1 = 1.0, .D2 = 1.0, .T1 = 1.0, .T2 = 1.0, .T3 = 1.0, .T4 = 1.0, .T5 = 1.0 }};
@@ -693,16 +708,41 @@ int SendInitCmds()
     return NUMBER_INIT_CMDS;
 }
 
-int SendLRScienceData()
+int InitLRScienceData()
 {
-//    //TODO collect the subset of data 
-//    buffUsbTx[iBuffUsbTx++] = DLE;
-//    buffUsbTx[iBuffUsbTx++] = SDATA_ID;
-//    buffUsbTx[iBuffUsbTx++] = 1;
-//    buffUsbTx[iBuffUsbTx++] = 0;
-//    buffUsbTx[iBuffUsbTx++] = ETX;
-    
+    lowRateHK.dle = DLE;
+    lowRateHK.scienceDataID = SDATA_ID;
+    lowRateHK.dataLength = 134;//66 from each HK and 2 for version
+    lowRateHK.mainMajorV = MAJOR_VERSION;//version to start, try to avoid confusion with LR events
+    lowRateHK.mainMinorV = MINOR_VERSION;//version to start, try to avoid confusion with LR events
+    lowRateHK.etx = ETX;
     return 1;
+}
+
+int CheckLRScienceData()
+{
+
+    if (lowRateReq)
+    {
+    
+        //TODO event option
+        if(0 == UART_LR_Data_GetTxBufferSize()) //Requests only come once every 30 Sec so if the buffer is not empty
+        {
+            uint8 curMainHK = WRAPDEC(buffHKWrite, HK_BUFFER_PACKETS); //the packet prior to the current write is most likely complete or blank        
+            memcpy(lowRateHK.mainHK, buffHK[buffHKWrite].packedTimeDate, sizeof(lowRateHK.mainHK));//copy latest Main HK minus headers
+            //TODO event HK needs to be copaaesied in CheckeEventPackets 
+            UART_LR_Data_PutArray((uint8 *) &lowRateHK, sizeof(lowRateHK));
+            lowRateReq = FALSE; //might need to make a critical section but the buffer in transmision should avoid duplicate sends.
+            return 1;
+        }
+        else
+        {
+            lowRateReq = FALSE; //might need to make a critical section but the buffer in transmision should avoid duplicate sends.
+            //TODO perhaps inc error
+            return -EBUSY;
+        }
+    }
+    return 0;
 }
 
 int ParseCmdInputByte(uint8 tempRx, uint8 i)
@@ -764,7 +804,8 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
         case CHECK_ETX_REQ:
             if (ETX == tempRx)
             {
-                SendLRScienceData();
+//                SendLRScienceData();
+                lowRateReq = TRUE;
             }
             else 
             {
@@ -1009,7 +1050,7 @@ uint8 CheckHKBuffer()
 {
     if (TRUE == hkCollecting) //see if collecting is done
     {
-        buffHK[buffHKWrite].missingValuesThisPacket[0] = 21;
+        buffHK[buffHKWrite].missingValuesThisPacket = 21;
         buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
         hkCollecting = FALSE;
         return 1;
@@ -2418,6 +2459,7 @@ int main(void)
     
     InitFrameBuffer(); //intialize sync and seq num
     InitHKBuffer();
+    InitLRScienceData();
     DMAHRDataChan  = DMA_HR_Data_DmaInitialize(DMA_HR_Data_BYTES_PER_BURST, DMA_HR_Data_REQUEST_PER_BURST, HI16(DMA_HR_Data_SRC_BASE), HI16(DMA_HR_Data_DST_BASE)); //keep this high rate channel for UART
     
 //    CyDelay(7000); //7 sec delay for boards to init TODO Debug
@@ -2453,6 +2495,7 @@ int main(void)
         tempRes = CheckEventPackets(); //TODO Move order of this call
         tempRes = CheckFrameBuffer(); //TODO Move order of this call
         tempRes = CheckHKBuffer(); //TODO Move order of this call
+        tempRes = CheckLRScienceData(); //TODO Move order of this call
         
         
 		//if (SPIM_BP_GetRxBufferSize > 0)
