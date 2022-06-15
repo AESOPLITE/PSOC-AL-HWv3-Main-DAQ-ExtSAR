@@ -35,6 +35,7 @@
  * V3.2 Changed init commands and reordered for flight prep
  * V3.3 Housekeeping format change to new format from mock Counter1. Disabled command isr till init   
  * V3.4 Added Low Rate Science Data Packet just Main HK for ths version
+ * V3.5 Added more of the Main HK values
  *
  * ========================================
 */
@@ -55,7 +56,7 @@
 #define WRAP3INC(a,b) ((a + 3) % (b))
 #define WRAPDEC(a,b) ((a + ((b) - 1)) % (b))
 #define WRAP(a,b) ((a) % (b)) //Macro to bring new calculated index a into the bounds of a circular buffer of size b
-#define ISELEMENTDONE(a,b,c) ((b <= c) ? ((a < b) || (a >= c)) : ((a < b) && (a >= c)) )//used to determin if element in circular buffer is done 
+#define ISELEMENTDONE(a,b,c) ((b <= c) ? ((a < b) || (a >= c)) : ((a < b) && (a >= c)) )//used to determine if element in circular buffer is done 
 #define ACTIVELEN(a,b,c) ((((c) - (a)) + (b)) % (c)) //Macro to calculate active length between a and b in circular buffer of size c. Exclusive, need to add 1 to make inclusive
 // From LROA103.ASM
 //;The format for the serial command is:
@@ -292,7 +293,6 @@ uint8 buffCmdRxC[COMMAND_SOURCES][DMA_LR_Cmd_1_BUFFER_SIZE];
 reg16 * buffCmdRxCWritePtr[COMMAND_SOURCES];
 uint8 buffCmdRxCRead[COMMAND_SOURCES];
 
-/* Defines for DMA_LR_Cmd_1 */
 #define DMA_HR_Data_BYTES_PER_BURST 1
 #define DMA_HR_Data_REQUEST_PER_BURST 1
 #define DMA_HR_Data_SRC_BASE (CYDEV_SRAM_BASE)
@@ -498,7 +498,28 @@ uint8 readBuffCmd[COMMAND_SOURCES];// = 0;
 volatile uint8 writeBuffCmd[COMMAND_SOURCES];// = 0;
 uint8 orderBuffCmd[COMMAND_SOURCES];
 
+// Register pointers for the I2C chips
+const uint8 INA226_Config_Reg = 0x00;
+const uint8 INA226_ShuntV_Reg = 0x01;
+const uint8 INA226_BusV_Reg = 0x02;
+const uint8 INA226_Power_Reg = 0x03;
+const uint8 INA226_Current_Reg = 0x04;
+const uint8 INA226_Calib_Reg = 0x05;
+const uint8 INA226_Mask_Reg = 0x06;
+const uint8 INA226_Alert_Reg = 0x07;
+const uint8 TMP100_Temp_Reg = 0x00;
+const uint8 Barometer_Pres_Reg = 0xF7;
 
+#define I2C_ADDRESS_TMP100 0x48
+#define I2C_ADDRESS_BAROMETER 0x70
+#define I2C_ADDRESS_RTC 0x6F
+#define I2C_ADDRESS_INA226_3V_DIG 0x44
+#define I2C_ADDRESS_INA226_3V_ANA 0x43
+#define I2C_ADDRESS_INA226_5V_DIG 0x41
+#define I2C_ADDRESS_INA226_5V_ANA 0x45
+#define I2C_ADDRESS_INA226_15V_DIG 0x42
+#define I2C_ADDRESS_INA226_TRACKER_SUPPLY 0x40//I2C Address 1000000 on Tracker power board
+#define I2C_ADDRESS_INA226_TRACKER_BIAS 0x46//I2C Address 1000110 on Tracker power board
 
 typedef struct I2CTrans {
 	uint8 type;
@@ -509,14 +530,43 @@ typedef struct I2CTrans {
 	uint8 error;
 } I2CTrans;
 
-#define I2C_BUFFER_SIZE (16u)
+#define I2C_BUFFER_SIZE (64u)
 #define I2C_READ (1u)
 #define I2C_WRITE (0u)
-#define I2C_MAX_RETRIES (200u)
+#define I2C_MAX_RETRIES (1u)
 I2CTrans buffI2C[I2C_BUFFER_SIZE];
 uint8 buffI2CRead, buffI2CWrite;
 uint8 numI2CRetry = 0;
 
+typedef struct HousekeepingTrackI2C {
+    uint8 slaveAddress;
+    uint8 regAddress;
+    uint8 cnt;
+    uint8 * data;
+    uint8 writeTrans;
+    uint8 readTrans;
+} HousekeepingTrackI2C;
+
+#define NO_WRITE_REG_ADDRESS (255u)
+#define MAIN_HK_I2C_BUFFER_SIZE (14u)
+
+HousekeepingTrackI2C mainHKI2C[MAIN_HK_I2C_BUFFER_SIZE]= {
+{I2C_ADDRESS_BAROMETER, 0xF7, 6, NULL, 0, 0},
+{I2C_ADDRESS_TMP100, NO_WRITE_REG_ADDRESS, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_3V_DIG, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_3V_DIG, 0x01, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_3V_ANA, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_3V_ANA, 0x01, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_5V_DIG, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_5V_DIG, 0x01, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_5V_ANA, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_5V_ANA, 0x01, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_15V_DIG, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x02, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x01, 2, NULL, 0, 0},
+{I2C_ADDRESS_INA226_TRACKER_BIAS, 0x02, 2, NULL, 0, 0}};
+
+uint8 mainHKI2CRead = 0;
 
 RTC_Main_TIME_DATE mainTimeDate;// Structure for a local copy of RTC values, not updated by RTC
 RTC_Main_TIME_DATE* mainTimeDateSysPtr;// Structure for a local copy of RTC values, not updated by RTC
@@ -543,21 +593,6 @@ uint8 dataRTCI2C[DATA_RTS_I2C_BYTES] = {
 
 uint8 curRTSI2CTrans = I2C_BUFFER_SIZE;
 
-// Register pointers for the power monitoring chips
-const uint8 INA226_Config_Reg = 0x00;
-const uint8 INA226_ShuntV_Reg = 0x01;
-const uint8 INA226_BusV_Reg = 0x02;
-const uint8 INA226_Power_Reg = 0x03;
-const uint8 INA226_Current_Reg = 0x04;
-const uint8 INA226_Calib_Reg = 0x05;
-const uint8 INA226_Mask_Reg = 0x06;
-const uint8 INA226_Alert_Reg = 0x07;
-
-const uint8 I2C_Address_TMP100 = 0x48;
-const uint8 TMP100_Temp_Reg = 0x00;
-const uint8 I2C_Address_Barometer = 0x70;
-const uint8 I2C_Address_RTC = 0x6F;
-const uint8 I2C_Address_INA226_5V_Dig = 0x41;
 
 
 typedef struct BaroCoeff {
@@ -597,7 +632,7 @@ volatile uint8 lowRateReq = FALSE; //state to request low rate science data pack
 
 
 //const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 1.0, .Y1 = 1.0, .Y2 = 1.0, .Y3 = 1.0, .C1 = 1.0, .C2 = 1.0, .C3 = 1.0, .D1 = 1.0, .D2 = 1.0, .T1 = 1.0, .T2 = 1.0, .T3 = 1.0, .T4 = 1.0, .T5 = 1.0 }};
-const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 5.875516, .Y1 = -3947.926, .Y2 = -10090.9, .Y3 = 0.0, .C1 = 95.4503, .C2 = 2.982818, .C3 = -135.3036, .D1 = 0.042247, .D2 = 0.0, .T1 = 27.91302, .T2 = 0.873949, .T3 = 21.00155, .T4 = 36.63574, .T5 = 0.0 }};
+//const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 5.875516, .Y1 = -3947.926, .Y2 = -10090.9, .Y3 = 0.0, .C1 = 95.4503, .C2 = 2.982818, .C3 = -135.3036, .D1 = 0.042247, .D2 = 0.0, .T1 = 27.91302, .T2 = 0.873949, .T3 = 21.00155, .T4 = 36.63574, .T5 = 0.0 }};
 double curBaroTemp[NUM_BARO];
 double curBaroPres[NUM_BARO];
 uint32 curBaroTempCnt[NUM_BARO];
@@ -607,21 +642,21 @@ uint32 baroReadReady = 0u;
 uint8 loopCount = 0;
 uint8 loopCountCheck = 0;
 #define SELECT_HIGH_LOOPS 250
-
-double BaroTempCalc ( double U, const BaroCoEff * bce )
-{
-	return (((bce->Y1) * U) + ((bce->Y2) * pow(U, 2))  + ((bce->Y3) * pow(U, 3)));
-}
-
-double BaroPresCalc ( double Tao, double U, const BaroCoEff * bce )
-{
-	double Usq = pow( U, 2);
-	double C = ((bce->C1) + ((bce->C2) * U) + ((bce->C3) * Usq)); 
-	double D = ((bce->D1) + ((bce->D2) * U)); 
-	double T0 = ((bce->T1) + ((bce->T2) * U) + ((bce->T3) * Usq) + ((bce->T4) * (U * Usq)) + ((bce->T5) * (Usq * Usq))); 
-	double ratio = (1 - (pow(T0, 2) / pow(Tao, 2)));
-	return ((C * ratio) * (1 - (D * ratio)));
-}
+//
+//double BaroTempCalc ( double U, const BaroCoEff * bce )
+//{
+//	return (((bce->Y1) * U) + ((bce->Y2) * pow(U, 2))  + ((bce->Y3) * pow(U, 3)));
+//}
+//
+//double BaroPresCalc ( double Tao, double U, const BaroCoEff * bce )
+//{
+//	double Usq = pow( U, 2);
+//	double C = ((bce->C1) + ((bce->C2) * U) + ((bce->C3) * Usq)); 
+//	double D = ((bce->D1) + ((bce->D2) * U)); 
+//	double T0 = ((bce->T1) + ((bce->T2) * U) + ((bce->T3) * Usq) + ((bce->T4) * (U * Usq)) + ((bce->T5) * (Usq * Usq))); 
+//	double ratio = (1 - (pow(T0, 2) / pow(Tao, 2)));
+//	return ((C * ratio) * (1 - (D * ratio)));
+//}
 
 /*******************************************************************************
 * Function Name: CmdBytes2String
@@ -1050,10 +1085,48 @@ uint8 CheckHKBuffer()
 {
     if (TRUE == hkCollecting) //see if collecting is done
     {
-        buffHK[buffHKWrite].missingValuesThisPacket = 21;
-        buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
-        hkCollecting = FALSE;
-        return 1;
+        
+        uint8 continueCheck = TRUE;
+        do
+        {
+            if( I2C_BUFFER_SIZE == mainHKI2C[mainHKI2CRead].readTrans ) //if set to this there re no more transactions
+            {
+                mainHKI2CRead = MAIN_HK_I2C_BUFFER_SIZE;
+                continueCheck = FALSE;
+            }
+            else if( ISELEMENTDONE(mainHKI2C[mainHKI2CRead].readTrans, buffI2CRead, buffI2CWrite) )// checck if transaction done
+            {
+                
+            
+                if(buffI2C[mainHKI2C[mainHKI2CRead].readTrans].error )
+                {
+                    memset(mainHKI2C[mainHKI2CRead].data, 0, mainHKI2C[mainHKI2CRead].cnt);//0 values since errors
+                    
+                    buffHK[buffHKWrite].missingValuesThisPacket++;
+                }
+                else if(I2C_BUFFER_SIZE != mainHKI2C[mainHKI2CRead].writeTrans)
+                {
+                    if(buffI2C[mainHKI2C[mainHKI2CRead].writeTrans].error )
+                    {
+                        memset(mainHKI2C[mainHKI2CRead].data, 0, mainHKI2C[mainHKI2CRead].cnt);//0 values since errors
+                        
+                        buffHK[buffHKWrite].missingValuesThisPacket++;
+                    }
+                }
+                mainHKI2CRead++;
+                
+            }
+            else 
+            {
+                continueCheck = FALSE;// wait for I2c
+            }
+            if (MAIN_HK_I2C_BUFFER_SIZE <= mainHKI2CRead)
+            {
+                buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
+                hkCollecting = FALSE;
+                return 1;
+            }
+        }while(continueCheck);
     }
     else if ((TRUE == hkReq)) //see if req is made by ISRCheckBaro
     {
@@ -1123,6 +1196,7 @@ uint8 CheckHKBuffer()
             temp32 >>= 8;
             buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF;
         }
+        
 //        uint8 buffBaroCapNumWriteTemp = buffBaroCapNumWrite; //DEBUG
 //        if (buffBaroCapNumWriteTemp )
 //        {
@@ -1134,6 +1208,75 @@ uint8 CheckHKBuffer()
 //        }
 //        if ((0 != buffBaroCapNum[0][buffBaroCapNumWriteTemp]) && (buffBaroCapNum[0][buffBaroCapNumWriteTemp] == buffBaroCapNum[1][buffBaroCapNumWriteTemp])  && (buffBaroCapNum[2][buffBaroCapNumWriteTemp] == buffBaroCapNum[3][buffBaroCapNumWriteTemp])) buffHK[buffHKWrite].padding[0]=1;//DEBUG
 //        Pin_CE1_Write(buffHK[buffHKWrite].secs[3] % 2); //DEBUG timing on scope
+        buffHK[buffHKWrite].missingValuesThisPacket = 8;
+        
+        //load the data pointer of each
+        mainHKI2C[0].data = buffHK[buffHKWrite].baroPres3;//I2C Address 1110000
+        mainHKI2C[1].data = buffHK[buffHKWrite].boardTemperature;//I2C Address 1001000
+        mainHKI2C[2].data = buffHK[buffHKWrite].digital3VVoltage;//I2C Address 1000100
+        mainHKI2C[3].data = buffHK[buffHKWrite].digital3VAmperage;//I2C Address 1000100
+        mainHKI2C[4].data = buffHK[buffHKWrite].analog3VVoltage;//I2C Address 1000011
+        mainHKI2C[5].data = buffHK[buffHKWrite].analog3VAmperage;//I2C Address 1000011
+        mainHKI2C[6].data = buffHK[buffHKWrite].digital5VVoltage;//I2C Address 1000001
+        mainHKI2C[7].data = buffHK[buffHKWrite].digital5VAmperage;//I2C Address 1000001
+        mainHKI2C[8].data = buffHK[buffHKWrite].analog5VVoltage;//I2C Address 1000101
+        mainHKI2C[9].data = buffHK[buffHKWrite].analog5VAmperage;//I2C Address 1000101
+        mainHKI2C[10].data = buffHK[buffHKWrite].digital15VVoltage;//I2C Address 1000010
+        mainHKI2C[11].data = buffHK[buffHKWrite].trackerVoltage;//I2C Address 1000000
+        mainHKI2C[12].data = buffHK[buffHKWrite].trackerAmperage;//I2C Address 1000000
+        mainHKI2C[13].data = buffHK[buffHKWrite].trackerBiasVoltage;//I2C Address 1000110
+        mainHKI2CRead = 0; //start from begining of i2c tracker
+        uint8 fullI2CTrans = FALSE;
+        for (uint8 curI2C = 0; curI2C < MAIN_HK_I2C_BUFFER_SIZE; curI2C++)//create all i2c transations
+        {
+            if(fullI2CTrans)
+            {
+                mainHKI2C[curI2C].writeTrans = I2C_BUFFER_SIZE; //buffer full so don't attempt this i2c 
+                mainHKI2C[curI2C].readTrans = I2C_BUFFER_SIZE; //buffer full so don't attempt this i2c
+                buffHK[buffHKWrite].missingValuesThisPacket++;
+            }
+            else
+            {
+                if(I2C_BUFFER_SIZE <= (3 + ACTIVELEN(buffI2CRead, buffI2CWrite, I2C_BUFFER_SIZE)))
+                {
+                    mainHKI2C[curI2C].writeTrans = I2C_BUFFER_SIZE; //buffer full so don't attempt this i2c 
+                    mainHKI2C[curI2C].readTrans = I2C_BUFFER_SIZE; //buffer full so don't attempt this i2c
+                    buffHK[buffHKWrite].missingValuesThisPacket++;
+                    fullI2CTrans = TRUE;
+                }
+                else
+                {
+                    if(NO_WRITE_REG_ADDRESS == mainHKI2C[curI2C].regAddress)
+                    {
+                        mainHKI2C[curI2C].writeTrans = I2C_BUFFER_SIZE; //no need to write reg pointer 
+                        
+                    }
+                    else
+                    {
+                        mainHKI2C[curI2C].writeTrans = buffI2CWrite;//index so can check results
+                        buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write the register pointer
+                        buffI2C[buffI2CWrite].slaveAddress = mainHKI2C[curI2C].slaveAddress;
+                        buffI2C[buffI2CWrite].cnt = 1;// only 1 byte
+                        buffI2C[buffI2CWrite].data = &(mainHKI2C[curI2C].regAddress);//data points to the register number
+                        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+                        
+                        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+                        
+                    }
+                    mainHKI2C[curI2C].readTrans = buffI2CWrite;//index so can check results
+                    buffI2C[buffI2CWrite].type = I2C_READ;//need to read the values
+                    buffI2C[buffI2CWrite].slaveAddress = mainHKI2C[curI2C].slaveAddress;
+                    buffI2C[buffI2CWrite].cnt = mainHKI2C[curI2C].cnt;//spefic number of bytes to redout
+                    buffI2C[buffI2CWrite].data = mainHKI2C[curI2C].data;//data pointer
+                    buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+                    
+                    buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+                }
+                
+            }
+            
+            
+        }
     }
     return 0;
 }
@@ -1661,51 +1804,57 @@ uint8 CheckRTC()
     }
     else if (0 != (rtcStatus & RTS_SET_MAIN))
     {
-        curRTSI2CTrans = buffI2CWrite;
-        buffI2CWrite = WRAP(buffI2CWrite + 2, I2C_BUFFER_SIZE);
-        
-        buffI2C[curRTSI2CTrans].type = I2C_WRITE;
-        buffI2C[curRTSI2CTrans].slaveAddress = I2C_Address_RTC;
-        buffI2C[curRTSI2CTrans].data = dataRTCI2C;
-        buffI2C[curRTSI2CTrans].cnt = 1;
-        buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_COMPLETE_XFER;
-//        buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_NO_STOP;
-        
-        uint8 curRTSI2CTrans2 = WRAPINC(curRTSI2CTrans, I2C_BUFFER_SIZE);
-        buffI2C[curRTSI2CTrans2].type = I2C_READ;
-        buffI2C[curRTSI2CTrans2].slaveAddress = I2C_Address_RTC;
-        buffI2C[curRTSI2CTrans2].data = (dataRTCI2C + 1); //0 element is register address to write
-        buffI2C[curRTSI2CTrans2].cnt = 7;
-        buffI2C[curRTSI2CTrans2].mode = I2C_RTC_MODE_COMPLETE_XFER;
-        rtcStatus |= RTS_SET_MAIN_INP;
-        rtcStatus ^= RTS_SET_MAIN;
+        if(I2C_BUFFER_SIZE > (3 + ACTIVELEN(buffI2CRead, buffI2CWrite, I2C_BUFFER_SIZE)))
+        {
+            curRTSI2CTrans = buffI2CWrite;
+            buffI2CWrite = WRAP(buffI2CWrite + 2, I2C_BUFFER_SIZE);
+            
+            buffI2C[curRTSI2CTrans].type = I2C_WRITE;
+            buffI2C[curRTSI2CTrans].slaveAddress = I2C_ADDRESS_RTC;
+            buffI2C[curRTSI2CTrans].data = dataRTCI2C;
+            buffI2C[curRTSI2CTrans].cnt = 1;
+            buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_COMPLETE_XFER;
+    //        buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_NO_STOP;
+            
+            uint8 curRTSI2CTrans2 = WRAPINC(curRTSI2CTrans, I2C_BUFFER_SIZE);
+            buffI2C[curRTSI2CTrans2].type = I2C_READ;
+            buffI2C[curRTSI2CTrans2].slaveAddress = I2C_ADDRESS_RTC;
+            buffI2C[curRTSI2CTrans2].data = (dataRTCI2C + 1); //0 element is register address to write
+            buffI2C[curRTSI2CTrans2].cnt = 7;
+            buffI2C[curRTSI2CTrans2].mode = I2C_RTC_MODE_COMPLETE_XFER;
+            rtcStatus |= RTS_SET_MAIN_INP;
+            rtcStatus ^= RTS_SET_MAIN;
+        }
     }
     else if (0 != (rtcStatus & RTS_SET_I2C))
     {
-        curRTSI2CTrans = buffI2CWrite;
-        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
-        
-        RTC_Main_DisableInt();
-        mainTimeDateSysPtr = RTC_Main_ReadTime();
-        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// make local copy before changes
-        RTC_Main_EnableInt();
-        
-        dataRTCI2C[1] = (Dec2BCD(mainTimeDate.Sec) & 0x7F) | 0x80; //0x80 enables Oscillator
-        dataRTCI2C[2] = Dec2BCD(mainTimeDate.Min) & 0x7F;
-        dataRTCI2C[3] = Dec2BCD(mainTimeDate.Hour) & 0x3F;
-        dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x08); //DayOfWeek starts at 1. 0x08 enables external battery
-        dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth )& 0x3F;
-        dataRTCI2C[6] = Dec2BCD(mainTimeDate.Month) & 0x1F;
-        dataRTCI2C[7] = Dec2BCD((uint8)(mainTimeDate.Year % 100));
-        
-        buffI2C[curRTSI2CTrans].type = I2C_WRITE;
-        buffI2C[curRTSI2CTrans].slaveAddress = I2C_Address_RTC;
-        buffI2C[curRTSI2CTrans].data = dataRTCI2C;
-        buffI2C[curRTSI2CTrans].cnt = 8;
-        buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_COMPLETE_XFER;
-        
-        rtcStatus |= RTS_SET_I2C_INP;
-        rtcStatus ^= RTS_SET_I2C;
+        if(I2C_BUFFER_SIZE > (2 + ACTIVELEN(buffI2CRead, buffI2CWrite, I2C_BUFFER_SIZE)))
+        {
+            curRTSI2CTrans = buffI2CWrite;
+            buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+            
+            RTC_Main_DisableInt();
+            mainTimeDateSysPtr = RTC_Main_ReadTime();
+            memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// make local copy before changes
+            RTC_Main_EnableInt();
+            
+            dataRTCI2C[1] = (Dec2BCD(mainTimeDate.Sec) & 0x7F) | 0x80; //0x80 enables Oscillator
+            dataRTCI2C[2] = Dec2BCD(mainTimeDate.Min) & 0x7F;
+            dataRTCI2C[3] = Dec2BCD(mainTimeDate.Hour) & 0x3F;
+            dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x08); //DayOfWeek starts at 1. 0x08 enables external battery
+            dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth )& 0x3F;
+            dataRTCI2C[6] = Dec2BCD(mainTimeDate.Month) & 0x1F;
+            dataRTCI2C[7] = Dec2BCD((uint8)(mainTimeDate.Year % 100));
+            
+            buffI2C[curRTSI2CTrans].type = I2C_WRITE;
+            buffI2C[curRTSI2CTrans].slaveAddress = I2C_ADDRESS_RTC;
+            buffI2C[curRTSI2CTrans].data = dataRTCI2C;
+            buffI2C[curRTSI2CTrans].cnt = 8;
+            buffI2C[curRTSI2CTrans].mode = I2C_RTC_MODE_COMPLETE_XFER;
+            
+            rtcStatus |= RTS_SET_I2C_INP;
+            rtcStatus ^= RTS_SET_I2C;
+        }
     }
     else if (0 != (rtcStatus & RTS_SET_EVENT))
     {
