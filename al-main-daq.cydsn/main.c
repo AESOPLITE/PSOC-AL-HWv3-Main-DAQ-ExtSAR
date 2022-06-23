@@ -37,6 +37,7 @@
  * V3.4 Added Low Rate Science Data Packet just Main HK for ths version
  * V3.5 Added more of the Main HK values
  * V3.6 Added more handling of the I2C baro
+ * V3.7 Fixed I2C Barometer_COE_PTAT21 register location, 
  *
  * ========================================
 */
@@ -49,7 +50,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 6 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 7 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -511,7 +512,8 @@ const uint8 INA226_Alert_Reg = 0x07;
 const uint8 TMP100_Temp_Reg = 0x00;
 const uint8 Barometer_Pres_Reg = 0xF7;
 const uint8 Barometer_COE_PR11 = 0xA0;
-const uint8 Barometer_COE_PTAT21 = 0xA0;
+const uint8 Barometer_COE_PTAT21 = 0xB1;
+
 
 #define I2C_ADDRESS_TMP100 0x48
 #define I2C_ADDRESS_BAROMETER 0x70
@@ -554,20 +556,20 @@ typedef struct HousekeepingTrackI2C {
 #define MAIN_HK_I2C_BUFFER_SIZE (14u)
 
 HousekeepingTrackI2C mainHKI2C[MAIN_HK_I2C_BUFFER_SIZE]= {
-{I2C_ADDRESS_BAROMETER, 0xF7, 6, NULL, 0, 0},
-{I2C_ADDRESS_TMP100, NO_WRITE_REG_ADDRESS, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_3V_DIG, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_3V_DIG, 0x01, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_3V_ANA, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_3V_ANA, 0x01, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_5V_DIG, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_5V_DIG, 0x01, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_5V_ANA, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_5V_ANA, 0x01, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_15V_DIG, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x02, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x01, 2, NULL, 0, 0},
-{I2C_ADDRESS_INA226_TRACKER_BIAS, 0x02, 2, NULL, 0, 0}};
+{I2C_ADDRESS_BAROMETER, 0xF7, 6, NULL, 0, 0},//Barometer_Pres_Reg = 0xF7
+{I2C_ADDRESS_TMP100, NO_WRITE_REG_ADDRESS, 2, NULL, 0, 0},//TMP100 defaults to read temp reg
+{I2C_ADDRESS_INA226_3V_DIG, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_3V_DIG, 0x01, 2, NULL, 0, 0},//INA226_ShuntV_Reg = 0x01
+{I2C_ADDRESS_INA226_3V_ANA, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_3V_ANA, 0x01, 2, NULL, 0, 0},//INA226_ShuntV_Reg = 0x01
+{I2C_ADDRESS_INA226_5V_DIG, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_5V_DIG, 0x01, 2, NULL, 0, 0},//INA226_ShuntV_Reg = 0x01
+{I2C_ADDRESS_INA226_5V_ANA, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_5V_ANA, 0x01, 2, NULL, 0, 0},//INA226_ShuntV_Reg = 0x01
+{I2C_ADDRESS_INA226_15V_DIG, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x02, 2, NULL, 0, 0},//INA226_BusV_Reg = 0x02
+{I2C_ADDRESS_INA226_TRACKER_SUPPLY, 0x01, 2, NULL, 0, 0},//INA226_ShuntV_Reg = 0x01
+{I2C_ADDRESS_INA226_TRACKER_BIAS, 0x02, 2, NULL, 0, 0}};//INA226_BusV_Reg = 0x02
 
 uint8 mainHKI2CRead = 0;
 
@@ -1052,7 +1054,7 @@ FmBufferIndex InitFrameBuffer()
     return initFB;
 }
 
-const uint8 ForcedSampleBaroI2CBytes[2] = {0xF4, 0xFD}; //F4 is register address. in FD 01 lsb is forcedmode. rest 1s 64 avg for both temp and pressure
+const uint8 ForcedSampleBaroI2CBytes[2] = {0xF4, 0xFD}; //F4 is CTRL_MEAS register address. In FD 01 lsb is forcedmode, rest 1s 64 avg for both temp and pressure
 
 int8 ForcedSampleBaroI2C()
 {
@@ -1061,7 +1063,7 @@ int8 ForcedSampleBaroI2C()
         buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write to reg to force sample
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 2;
-        buffI2C[buffI2CWrite].data = ForcedSampleBaroI2CBytes;//register thenvalue to force samp
+        buffI2C[buffI2CWrite].data = &ForcedSampleBaroI2CBytes;//register then value to force samp
         buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
                     
@@ -1083,7 +1085,7 @@ int8 InitBaroI2COTP()//get OTP coeffienct to adjust the raw outputs on the GSE
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 1;//reg byte address
         buffI2C[buffI2CWrite].data = &Barometer_COE_PR11;//data points to the register number
-        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
         
         buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
@@ -1097,7 +1099,7 @@ int8 InitBaroI2COTP()//get OTP coeffienct to adjust the raw outputs on the GSE
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 1;//reg byte address
         buffI2C[buffI2CWrite].data = &Barometer_COE_PTAT21;//data points to the register number
-        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
         
         buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
@@ -1328,8 +1330,15 @@ uint8 CheckHKBuffer()
                         buffI2C[buffI2CWrite].slaveAddress = mainHKI2C[curI2C].slaveAddress;
                         buffI2C[buffI2CWrite].cnt = 1;// only 1 byte
                         buffI2C[buffI2CWrite].data = &(mainHKI2C[curI2C].regAddress);//data points to the register number
-                        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
-                        
+                        if (2 > curI2C) //DEBUG Baro and Temp I2C do not want stops
+                        {
+                            buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+                            
+                        }
+                        else 
+                        {
+                            buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+                        }
                         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
                         
                     }
