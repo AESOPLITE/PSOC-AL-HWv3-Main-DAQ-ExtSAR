@@ -36,6 +36,7 @@
  * V3.3 Housekeeping format change to new format from mock Counter1. Disabled command isr till init   
  * V3.4 Added Low Rate Science Data Packet just Main HK for ths version
  * V3.5 Added more of the Main HK values
+ * V3.6 Added more handling of the I2C baro
  *
  * ========================================
 */
@@ -48,7 +49,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 5 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 6 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -509,6 +510,8 @@ const uint8 INA226_Mask_Reg = 0x06;
 const uint8 INA226_Alert_Reg = 0x07;
 const uint8 TMP100_Temp_Reg = 0x00;
 const uint8 Barometer_Pres_Reg = 0xF7;
+const uint8 Barometer_COE_PR11 = 0xA0;
+const uint8 Barometer_COE_PTAT21 = 0xA0;
 
 #define I2C_ADDRESS_TMP100 0x48
 #define I2C_ADDRESS_BAROMETER 0x70
@@ -567,6 +570,8 @@ HousekeepingTrackI2C mainHKI2C[MAIN_HK_I2C_BUFFER_SIZE]= {
 {I2C_ADDRESS_INA226_TRACKER_BIAS, 0x02, 2, NULL, 0, 0}};
 
 uint8 mainHKI2CRead = 0;
+
+uint8 baroOnboardOTP[20];//storage for the OTP baro coefficients
 
 RTC_Main_TIME_DATE mainTimeDate;// Structure for a local copy of RTC values, not updated by RTC
 RTC_Main_TIME_DATE* mainTimeDateSysPtr;// Structure for a local copy of RTC values, not updated by RTC
@@ -1047,6 +1052,70 @@ FmBufferIndex InitFrameBuffer()
     return initFB;
 }
 
+const uint8 ForcedSampleBaroI2CBytes[2] = {0xF4, 0xFD}; //F4 is register address. in FD 01 lsb is forcedmode. rest 1s 64 avg for both temp and pressure
+
+int8 ForcedSampleBaroI2C()
+{
+    if(I2C_BUFFER_SIZE > (2 + ACTIVELEN(buffI2CRead, buffI2CWrite, I2C_BUFFER_SIZE)))
+    {
+        buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write to reg to force sample
+        buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
+        buffI2C[buffI2CWrite].cnt = 2;
+        buffI2C[buffI2CWrite].data = ForcedSampleBaroI2CBytes;//register thenvalue to force samp
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+                    
+        return 1;
+    }
+    else
+    {
+        return -EBUSY;
+    }
+}
+
+int8 InitBaroI2COTP()//get OTP coeffienct to adjust the raw outputs on the GSE 
+{
+     if(I2C_BUFFER_SIZE > (5 + ACTIVELEN(buffI2CRead, buffI2CWrite, I2C_BUFFER_SIZE)))
+    {
+        
+        
+        buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write to reg 
+        buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
+        buffI2C[buffI2CWrite].cnt = 1;//reg byte address
+        buffI2C[buffI2CWrite].data = &Barometer_COE_PR11;//data points to the register number
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+        
+        buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
+        buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
+        buffI2C[buffI2CWrite].cnt = 16;//16 is first set of OTP
+        buffI2C[buffI2CWrite].data = baroOnboardOTP;//data pointer to start of OTP storage
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+        
+        buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write to reg
+        buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
+        buffI2C[buffI2CWrite].cnt = 1;//reg byte address
+        buffI2C[buffI2CWrite].data = &Barometer_COE_PTAT21;//data points to the register number
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+        
+        buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
+        buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
+        buffI2C[buffI2CWrite].cnt = 4;//4  more OTP
+        buffI2C[buffI2CWrite].data = (baroOnboardOTP + 16);//data pointer to rest of OTP storage
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
+        buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
+        
+        return 1;
+    }
+    else
+    {
+        return -EBUSY;
+    }
+}
+
+
 uint8 InitRTC()
 {
 //    mainTimeDate = RTC_Main_ReadTime(); //TODO dont write to the read loactiion, create temp structure
@@ -1124,6 +1193,7 @@ uint8 CheckHKBuffer()
             {
                 buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
                 hkCollecting = FALSE;
+                ForcedSampleBaroI2C(); //Force sample next Baro
                 return 1;
             }
         }while(continueCheck);
@@ -1266,7 +1336,7 @@ uint8 CheckHKBuffer()
                     mainHKI2C[curI2C].readTrans = buffI2CWrite;//index so can check results
                     buffI2C[buffI2CWrite].type = I2C_READ;//need to read the values
                     buffI2C[buffI2CWrite].slaveAddress = mainHKI2C[curI2C].slaveAddress;
-                    buffI2C[buffI2CWrite].cnt = mainHKI2C[curI2C].cnt;//spefic number of bytes to redout
+                    buffI2C[buffI2CWrite].cnt = mainHKI2C[curI2C].cnt;//spefic number of bytes to readout
                     buffI2C[buffI2CWrite].data = mainHKI2C[curI2C].data;//data pointer
                     buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
                     
@@ -1280,6 +1350,8 @@ uint8 CheckHKBuffer()
     }
     return 0;
 }
+
+
 
 #define EV_DUMP_SIZE (EV_BUFFER_SIZE - WRAP(EV_BUFFER_SIZE, FRAME_DATA_BYTES))
 #define EV_MIN_SIZE (9u)
@@ -2636,6 +2708,7 @@ int main(void)
     };
     SendInitCmds();//Enqueued all init commands
 	isr_Cm_Enable();//Since init commands are enqueued, start interrupts for more commands
+    InitBaroI2COTP();//start the process of getting these OTP coefficients once
 	for(;;)
 	{
 		
