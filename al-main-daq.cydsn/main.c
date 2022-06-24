@@ -37,7 +37,8 @@
  * V3.4 Added Low Rate Science Data Packet just Main HK for ths version
  * V3.5 Added more of the Main HK values
  * V3.6 Added more handling of the I2C baro
- * V3.7 Fixed I2C Barometer_COE_PTAT21 register location, 
+ * V3.7 Fixed I2C Barometer_COE_PTAT21 register location, changed ForcedSampleBaroI2CBytes, use i2c no stop mode with baro
+ * V3.8 Roll back ForcedSampleBaroI2CBytes & no stop changes
  *
  * ========================================
 */
@@ -50,7 +51,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 7 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 8 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1063,7 +1064,7 @@ int8 ForcedSampleBaroI2C()
         buffI2C[buffI2CWrite].type = I2C_WRITE;//need to write to reg to force sample
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 2;
-        buffI2C[buffI2CWrite].data = &ForcedSampleBaroI2CBytes;//register then value to force samp
+        buffI2C[buffI2CWrite].data = ForcedSampleBaroI2CBytes;//register then value to force samp
         buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
                     
@@ -1085,7 +1086,8 @@ int8 InitBaroI2COTP()//get OTP coeffienct to adjust the raw outputs on the GSE
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 1;//reg byte address
         buffI2C[buffI2CWrite].data = &Barometer_COE_PR11;//data points to the register number
-        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+//        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
         
         buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
@@ -1099,7 +1101,8 @@ int8 InitBaroI2COTP()//get OTP coeffienct to adjust the raw outputs on the GSE
         buffI2C[buffI2CWrite].slaveAddress = I2C_ADDRESS_BAROMETER;
         buffI2C[buffI2CWrite].cnt = 1;//reg byte address
         buffI2C[buffI2CWrite].data = &Barometer_COE_PTAT21;//data points to the register number
-        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+//        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+        buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
         
         buffI2C[buffI2CWrite].type = I2C_READ;//need to read the OTP
@@ -1330,15 +1333,15 @@ uint8 CheckHKBuffer()
                         buffI2C[buffI2CWrite].slaveAddress = mainHKI2C[curI2C].slaveAddress;
                         buffI2C[buffI2CWrite].cnt = 1;// only 1 byte
                         buffI2C[buffI2CWrite].data = &(mainHKI2C[curI2C].regAddress);//data points to the register number
-                        if (2 > curI2C) //DEBUG Baro and Temp I2C do not want stops
-                        {
-                            buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
-                            
-                        }
-                        else 
-                        {
+//                        if (2 > curI2C) //DEBUG Baro and Temp I2C do not want stops
+//                        {
+//                            buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_NO_STOP;
+//                            
+//                        }
+//                        else 
+//                        {
                             buffI2C[buffI2CWrite].mode = I2C_RTC_MODE_COMPLETE_XFER;
-                        }
+//                        }
                         buffI2CWrite = WRAPINC(buffI2CWrite, I2C_BUFFER_SIZE);
                         
                     }
