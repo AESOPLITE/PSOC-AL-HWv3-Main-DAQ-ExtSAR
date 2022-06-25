@@ -39,6 +39,7 @@
  * V3.6 Added more handling of the I2C baro
  * V3.7 Fixed I2C Barometer_COE_PTAT21 register location, changed ForcedSampleBaroI2CBytes, use i2c no stop mode with baro
  * V3.8 Roll back ForcedSampleBaroI2CBytes & no stop changes
+ * V3.9 Moved Barometer 1 & 2 Pressure, Temp & Time capture to ISR 
  *
  * ========================================
 */
@@ -51,7 +52,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 8 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 9 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1210,67 +1211,67 @@ uint8 CheckHKBuffer()
         hkReq = FALSE;
         CyExitCriticalSection(intState);
         //start specific data collection
-        uint32 temp32 = curBaroTempCnt[0];
-//        int8 i=2; //24bit for Counter1 style packet DEBUG
-        int8 i=3; //32bit 
-        buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
-        while (0 <= --i) //Fill the Higher order bytes
-        {
-            temp32 >>= 8;
-            buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF;
-        }
-        temp32 = curBaroPresCnt[0];
-      i=3; //32bit
-//        i=2; //24bit for Counter1 style packet DEBUG
-        buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
-        while (0 <= --i) //Fill the Higher order bytes
-        {
-            temp32 >>= 8;
-            buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF;
-        }
-        temp32 = curBaroTempCnt[1];
-        i=3; //32bit
-//        i=2; //24bit for Counter1 style packet DEBUG
-        buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
-        while (0 <= --i) //Fill the Higher order bytes
-        {
-            temp32 >>= 8;
-            buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF;
-        }
-        temp32 = curBaroPresCnt[1];
-        i=3; //32bit
-//        i=2; //24bit for Counter1 style packet DEBUG
-        buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
-        while (0 <= --i) //Fill the Higher order bytes
-        {
-            temp32 >>= 8;
-            buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF;
-        }
-        RTC_Main_DisableInt();
-        mainTimeDateSysPtr = RTC_Main_ReadTime();
-        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
-        RTC_Main_EnableInt();
+//        uint32 temp32 = curBaroTempCnt[0];
+////        int8 i=2; //24bit for Counter1 style packet DEBUG
+//        int8 i=3; //32bit 
+//        buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+//        while (0 <= --i) //Fill the Higher order bytes
+//        {
+//            temp32 >>= 8;
+//            buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF;
+//        }
+//        temp32 = curBaroPresCnt[0];
+//      i=3; //32bit
+////        i=2; //24bit for Counter1 style packet DEBUG
+//        buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+//        while (0 <= --i) //Fill the Higher order bytes
+//        {
+//            temp32 >>= 8;
+//            buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF;
+//        }
+//        temp32 = curBaroTempCnt[1];
+//        i=3; //32bit
+////        i=2; //24bit for Counter1 style packet DEBUG
+//        buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+//        while (0 <= --i) //Fill the Higher order bytes
+//        {
+//            temp32 >>= 8;
+//            buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF;
+//        }
+//        temp32 = curBaroPresCnt[1];
+//        i=3; //32bit
+////        i=2; //24bit for Counter1 style packet DEBUG
+//        buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+//        while (0 <= --i) //Fill the Higher order bytes
+//        {
+//            temp32 >>= 8;
+//            buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF;
+//        }
+//        RTC_Main_DisableInt();
+//        mainTimeDateSysPtr = RTC_Main_ReadTime();
+//        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
+//        RTC_Main_EnableInt();
         
-        temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
-        temp32 |= mainTimeDate.Month;
-        temp32 <<= 5;//shift left to make room for new bits;
-        temp32 |= mainTimeDate.DayOfMonth;
-        temp32 <<= 5;//shift left to make room for new bits;
-        temp32 |= mainTimeDate.Hour;
-        temp32 <<= 6;//shift left to make room for new bits;
-        temp32 |= mainTimeDate.Min;
-        temp32 <<= 6;//shift left to make room for new bits;
-        temp32 |= mainTimeDate.Sec;
-        
-//        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
-        i=3; //32bit
-//        i=2; //24bit for Counter1 style packet DEBUG
-        buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
-        while (0 <= --i) //Fill the Higher order bytes
-        {
-            temp32 >>= 8;
-            buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF;
-        }
+//        temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
+//        temp32 |= mainTimeDate.Month;
+//        temp32 <<= 5;//shift left to make room for new bits;
+//        temp32 |= mainTimeDate.DayOfMonth;
+//        temp32 <<= 5;//shift left to make room for new bits;
+//        temp32 |= mainTimeDate.Hour;
+//        temp32 <<= 6;//shift left to make room for new bits;
+//        temp32 |= mainTimeDate.Min;
+//        temp32 <<= 6;//shift left to make room for new bits;
+//        temp32 |= mainTimeDate.Sec;
+//        
+////        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
+//        i=3; //32bit
+////        i=2; //24bit for Counter1 style packet DEBUG
+//        buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+//        while (0 <= --i) //Fill the Higher order bytes
+//        {
+//            temp32 >>= 8;
+//            buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF;
+//        }
         
 //        uint8 buffBaroCapNumWriteTemp = buffBaroCapNumWrite; //DEBUG
 //        if (buffBaroCapNumWriteTemp )
@@ -2524,6 +2525,67 @@ CY_ISR(ISRBaroCap)
         {
             cntSecs++;
         }
+        uint32 temp32 = curBaroTempCnt[0];
+//        int8 i=2; //24bit for Counter1 style packet DEBUG
+        int8 i=3; //32bit 
+        buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        while (0 <= --i) //Fill the Higher order bytes
+        {
+            temp32 >>= 8;
+            buffHK[buffHKWrite].baroTemp1[i] = temp32 & 0xFF;
+        }
+        temp32 = curBaroPresCnt[0];
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
+        buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        while (0 <= --i) //Fill the Higher order bytes
+        {
+            temp32 >>= 8;
+            buffHK[buffHKWrite].baroPres1[i] = temp32 & 0xFF;
+        }
+        temp32 = curBaroTempCnt[1];
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
+        buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        while (0 <= --i) //Fill the Higher order bytes
+        {
+            temp32 >>= 8;
+            buffHK[buffHKWrite].baroTemp2[i] = temp32 & 0xFF;
+        }
+        temp32 = curBaroPresCnt[1];
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
+        buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        while (0 <= --i) //Fill the Higher order bytes
+        {
+            temp32 >>= 8;
+            buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF;
+        }
+        RTC_Main_DisableInt();
+        mainTimeDateSysPtr = RTC_Main_ReadTime();
+        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
+        RTC_Main_EnableInt();
+                temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
+        temp32 |= mainTimeDate.Month;
+        temp32 <<= 5;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.DayOfMonth;
+        temp32 <<= 5;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Hour;
+        temp32 <<= 6;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Min;
+        temp32 <<= 6;//shift left to make room for new bits;
+        temp32 |= mainTimeDate.Sec;
+        
+//        temp32 = 60 * ( ( 60 * mainTimeDate.Hour) + mainTimeDate.Min ) + mainTimeDate.Sec; // Convert RTC to secs
+        i=3; //32bit
+//        i=2; //24bit for Counter1 style packet DEBUG
+        buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF; // to make this endian independent and output as big endian, fill the LSB first
+        while (0 <= --i) //Fill the Higher order bytes
+        {
+            temp32 >>= 8;
+            buffHK[buffHKWrite].packedTimeDate[i] = temp32 & 0xFF;
+        }
+
     }
     else
     {
