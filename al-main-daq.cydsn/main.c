@@ -40,6 +40,7 @@
  * V3.7 Fixed I2C Barometer_COE_PTAT21 register location, changed ForcedSampleBaroI2CBytes, use i2c no stop mode with baro
  * V3.8 Roll back ForcedSampleBaroI2CBytes & no stop changes
  * V3.9 Moved Barometer 1 & 2 Pressure, Temp & Time capture to ISR 
+ * V3.10 Changed interupt priorities to elevate Event SPI reading
  *
  * ========================================
 */
@@ -52,7 +53,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 9 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 10 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -2100,6 +2101,7 @@ CY_ISR(ISRReadSPI)
 	}
 	else 
 	{
+        //TODO Error hadling
 //		Control_Reg_CD_Write(0x00u);
         continueRead = FALSE;
 //		SPIM_BP_ClearTxBuffer();
@@ -2516,6 +2518,10 @@ CY_ISR(ISRBaroCap)
 //	Pin_CE1_Write(cntSecs % 2); //DEBUG timing on scope
     if (0 == (cntSecs % tmpSecs))
     {
+        RTC_Main_DisableInt();
+        mainTimeDateSysPtr = RTC_Main_ReadTime();
+        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
+        RTC_Main_EnableInt();
         hkReq = TRUE;//request a new housekeeping packet
         if ((255 - cntSecs) <= tmpSecs)
         {
@@ -2561,11 +2567,8 @@ CY_ISR(ISRBaroCap)
             temp32 >>= 8;
             buffHK[buffHKWrite].baroPres2[i] = temp32 & 0xFF;
         }
-        RTC_Main_DisableInt();
-        mainTimeDateSysPtr = RTC_Main_ReadTime();
-        memcpy(&mainTimeDate, mainTimeDateSysPtr, sizeof(mainTimeDate));// copy to local struct before update
-        RTC_Main_EnableInt();
-                temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
+        
+        temp32 = (uint32)(mainTimeDate.Year % 2000) << 4;
         temp32 |= mainTimeDate.Month;
         temp32 <<= 5;//shift left to make room for new bits;
         temp32 |= mainTimeDate.DayOfMonth;
