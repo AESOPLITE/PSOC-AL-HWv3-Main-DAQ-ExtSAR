@@ -42,6 +42,7 @@
  * V3.9 Moved Barometer 1 & 2 Pressure, Temp & Time capture to ISR 
  * V3.10 Changed interupt priorities to elevate Event SPI reading
  * V3.11 Adding low rate copy of Event HK
+ * V3.12 Adding handling for end of low rate copy of Event HK
  *
  * ========================================
 */
@@ -54,7 +55,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 11 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 12 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1593,10 +1594,15 @@ int8 CheckFrameBuffer()
                     }
                     if (nBytes > lowRateOffset) //check if needed data to copy
                     {
-			            memcpy( (void*) ( (lowRateHK.eventHK) + tmpWriteLR ), (buffEv + curRead + lowRateOffset), (nBytes - lowRateOffset)); //copy data past the offset 
-                        tmpWriteLR += (nBytes - lowRateOffset);
+                        uint8 nBytesLR = MIN(nBytes, nDataBytesLeftLR);
+			            memcpy( (void*) ( (lowRateHK.eventHK) + tmpWriteLR ), (buffEv + curRead + lowRateOffset), (nBytesLR - lowRateOffset)); //copy data past the offset 
+                        tmpWriteLR += (nBytesLR - lowRateOffset);
+                        nDataBytesLeftLR -= nBytesLR;
                     }
-                    nDataBytesLeftLR -= nBytes;
+                    else
+                    {
+                        nDataBytesLeftLR -= nBytes;
+                    }
                 }
             }
                 
