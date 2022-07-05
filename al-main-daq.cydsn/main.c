@@ -43,6 +43,7 @@
  * V3.10 Changed interupt priorities to elevate Event SPI reading
  * V3.11 Adding low rate copy of Event HK
  * V3.12 Adding handling for end of low rate copy of Event HK
+ * V3.13 Added delay before RTC, fixed some RTC I2C bit ops
  *
  * ========================================
 */
@@ -55,7 +56,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 12 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 13 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1904,7 +1905,7 @@ uint8 CheckRTC()
             {
                 mainTimeDate.Sec = BCD2Dec(dataRTCI2C[1] & 0x7F);
                 mainTimeDate.Min = BCD2Dec(dataRTCI2C[2] & 0x7F);
-                mainTimeDate.Hour = BCD2Dec(dataRTCI2C[3] & 0x1F);
+                mainTimeDate.Hour = BCD2Dec(dataRTCI2C[3] & 0x3F);
 //                mainTimeDate.DayOfWeek = (dataRTCI2C[4] & 0x07); //0 is not valid and WriteTime doesn't modify this
                 mainTimeDate.DayOfMonth = BCD2Dec(dataRTCI2C[5] & 0x3F);
                 mainTimeDate.Month = BCD2Dec(dataRTCI2C[6] & 0x1F);
@@ -1965,8 +1966,8 @@ uint8 CheckRTC()
             dataRTCI2C[1] = (Dec2BCD(mainTimeDate.Sec) & 0x7F) | 0x80; //0x80 enables Oscillator
             dataRTCI2C[2] = Dec2BCD(mainTimeDate.Min) & 0x7F;
             dataRTCI2C[3] = Dec2BCD(mainTimeDate.Hour) & 0x3F;
-            dataRTCI2C[4] = ((Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x08); //DayOfWeek starts at 1. 0x08 enables external battery
-            dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth )& 0x3F;
+            dataRTCI2C[4] = (Dec2BCD(mainTimeDate.DayOfWeek - 1) & 0x07) | 0x08; //DayOfWeek starts at 1. 0x08 enables external battery
+            dataRTCI2C[5] = Dec2BCD(mainTimeDate.DayOfMonth) & 0x3F;
             dataRTCI2C[6] = Dec2BCD(mainTimeDate.Month) & 0x1F;
             dataRTCI2C[7] = Dec2BCD((uint8)(mainTimeDate.Year % 100));
             
@@ -2699,6 +2700,7 @@ int main(void)
 //    CyDmaChEnable(DMA_LR_Cmd_1_Chan, 1);
     
 //    buffCmdRxCWritePtr[0] = (reg16 *) &CY_DMA_TDMEM_STRUCT_PTR[0].TD1[2u];
+    I2C_RTC_Start();
     
 	SPIM_BP_Start();
 	SPIM_BP_ClearFIFO();
@@ -2773,7 +2775,6 @@ int main(void)
 //	SendInitCmds();
 	isr_B_StartEx(ISRBaroCap);
     
-    I2C_RTC_Start();
     InitRTC();
     //Debug 1 write and read
 //    buffI2CRead = 0;
@@ -2801,6 +2802,7 @@ int main(void)
 
     I2C_RTC_MasterClearStatus();
     rtcStatus = RTS_SET_MAIN; //changing flags in this will change startup behavior of RTCs
+    CyDelay(500); //half sec delay for boards to init TODO Debug
     
     do  //get set RTC Main
     {
@@ -2808,7 +2810,7 @@ int main(void)
         CheckI2C();//needed to process RTC
     }while(0 != rtcStatus) ;//Main RTC Set TODO Timeout
     rtcStatus = RTS_SET_EVENT; //changing flags in this will change startup behavior of RTCs
-    CyDelay(500); //half sec delay for boards to init TODO Debug
+//    CyDelay(500); //half sec delay for boards to init TODO Debug
     
     do  //get set RTC Event
     {
