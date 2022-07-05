@@ -44,6 +44,7 @@
  * V3.11 Adding low rate copy of Event HK
  * V3.12 Adding handling for end of low rate copy of Event HK
  * V3.13 Added delay before RTC, fixed some RTC I2C bit ops
+ * V3.14 Increased delay before RTC to 1 sec to give event PSOC startup time
  *
  * ========================================
 */
@@ -56,7 +57,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 13 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 14 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -2802,7 +2803,7 @@ int main(void)
 
     I2C_RTC_MasterClearStatus();
     rtcStatus = RTS_SET_MAIN; //changing flags in this will change startup behavior of RTCs
-    CyDelay(500); //half sec delay for boards to init TODO Debug
+    CyDelay(1000); //sec delay for boards to init TODO Debug
     
     do  //get set RTC Main
     {
