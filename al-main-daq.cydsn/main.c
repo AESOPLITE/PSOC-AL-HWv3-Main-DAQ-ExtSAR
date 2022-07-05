@@ -41,6 +41,7 @@
  * V3.8 Roll back ForcedSampleBaroI2CBytes & no stop changes
  * V3.9 Moved Barometer 1 & 2 Pressure, Temp & Time capture to ISR 
  * V3.10 Changed interupt priorities to elevate Event SPI reading
+ * V3.11 Adding low rate copy of Event HK
  *
  * ========================================
 */
@@ -53,7 +54,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 10 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 11 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -130,6 +131,7 @@ const void (* tabSPISel[NUM_SPI_DEV])(uint8) = {
 #define ENDDUMP_HEAD	(0xF7u)
 #define EVFIX_HEAD	(0xDBu) //Event PSOC fixed length packet
 #define EVVAR_HEAD	(0xDCu) //Event PSOC variable length packet
+#define EVHK_ID	(0xDEu) //Event PSOC HK ID
 const uint8 tabSPIHead[NUM_SPI_DEV] = {POW_HEAD}; //only power boards left , PHA_HEAD, CTR1_HEAD, TKR_HEAD, CTR3_HEAD};
 const uint8 frame00FF[2] = {0x00u, 0xFFu};
 uint8 buffSPI[NUM_SPI_DEV][SPI_BUFFER_SIZE];
@@ -144,8 +146,10 @@ EvBufferIndex buffEvWriteLast = 0u;
 
 enum readStatus {CHECKDATA, READOUTDATA, EORFOUND, EORERROR};
 enum commandStatus {WAIT_DLE, CHECK_ID, CHECK_LEN, READ_CMD, CHECK_ETX_CMD, CHECK_ETX_REQ};
+enum eventLowRateCopyState {NO_EVENT_LR_COPY, COPY_EVENT_HK, COPY_LAST_EVENT};//
 #define COMMAND_SOURCES 3
 enum commandStatus commandStatusC[COMMAND_SOURCES];
+enum eventLowRateCopyState eventLRCopy = COPY_EVENT_HK;
 uint8 commandLenC[COMMAND_SOURCES];
 uint8 cmdRxC[COMMAND_SOURCES][2];
 #define COMMAND_CHARS	(4u)
@@ -282,7 +286,7 @@ typedef struct LowRateHousekeeping {
     uint8 mainMajorV;//
     uint8 mainMinorV;//
     uint8 mainHK[66];//
-    uint8 eventHK[66];//
+    uint8 eventHK[72];//
     uint8 etx;//
 } LowRateHousekeeping;
 
@@ -1553,13 +1557,22 @@ int8 CheckFrameBuffer()
         EvBufferIndex curRead = packetEv[ packetEvHead ].header;
 		EvBufferIndex curEOR = packetEv[ packetEvHead ].EOR;
         EvBufferIndex nDataBytesLeft = ACTIVELEN(curRead, curEOR, EV_BUFFER_SIZE) + 1;
+        EvBufferIndex nDataBytesLeftLR = 0;//used for both HK and Event copy if packet meets criteria
         EvBufferIndex nBytes = 0;
         uint8 tmpWrite  = 0;
+        uint8 tmpWriteLR  = 0;//where to copy in the Low Rate packet
 		packetEvHead = WRAPINC(packetEvHead, PACKET_EVENT_SIZE);
         buffFrameData[ buffFrameDataWrite ].seqM =  seqFrame2HB & 0xFF; //middle seqence byte
         buffFrameData[ buffFrameDataWrite ].seqH =  seqFrame2HB >> 8; //high seqence byte
+        if (COPY_EVENT_HK == eventLRCopy) //check if LR is set to HK
+        {
+            if (EVHK_ID == buffEv[WRAP(curRead + 4, EV_BUFFER_SIZE)])//4 byte offset from headeris ID byte
+            {
+                nDataBytesLeftLR = nDataBytesLeft - 3; //don't copy the 3 byte EOR
+            }
+        }
 //        seqFrame2HB++;
-        while(nDataBytesLeft > 0)
+        while(0 < nDataBytesLeft)
 		{
 			nBytes = MIN(FRAME_DATA_BYTES - tmpWrite, nDataBytesLeft);
 			if (curEOR < curRead)
@@ -1569,6 +1582,25 @@ int8 CheckFrameBuffer()
             
 			memcpy( (void*) &(buffFrameData[ buffFrameDataWrite ].data[ tmpWrite ]), (buffEv + curRead), nBytes);
 
+            if (0 < nDataBytesLeftLR) //try to copy to Low Rate as well
+            {
+                if (COPY_EVENT_HK == eventLRCopy) //check if LR is set to HK
+                {
+                    uint8 lowRateOffset = 0; //might need to offset the start of the copy to needed data
+                    if( sizeof(lowRateHK.eventHK) < nDataBytesLeftLR )
+                    {
+                        lowRateOffset = nDataBytesLeftLR - sizeof(lowRateHK.eventHK); //calculate staring offset
+                    }
+                    if (nBytes > lowRateOffset) //check if needed data to copy
+                    {
+			            memcpy( (void*) ( (lowRateHK.eventHK) + tmpWriteLR ), (buffEv + curRead + lowRateOffset), (nBytes - lowRateOffset)); //copy data past the offset 
+                        tmpWriteLR += (nBytes - lowRateOffset);
+                    }
+                    nDataBytesLeftLR -= nBytes;
+                }
+            }
+                
+            
 			nDataBytesLeft -= nBytes;
 			curRead += (nBytes - 1); //avoiding overflow with - 1 , will add later
 //			if (curRead == curEOR)
@@ -2613,7 +2645,6 @@ int main(void)
 	uint8 iBuffUsbRx = 0;
 	uint8 nBuffUsbRx = 0;
 	enum readStatus readStatusBP = CHECKDATA;
-    
     /* Variable declarations for DMA_LR_Cmd_1 */
     /* Move these variable declarations to the top of the function */
 //    uint8 DMA_LR_Cmd_1_Chan;
