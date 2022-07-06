@@ -45,6 +45,7 @@
  * V3.12 Adding handling for end of low rate copy of Event HK
  * V3.13 Added delay before RTC, fixed some RTC I2C bit ops
  * V3.14 Increased delay before RTC to 1 sec to give event PSOC startup time
+ * V3.15 Fixed length of low rate, copy of mainHK & changed some init commands
  *
  * ========================================
 */
@@ -57,7 +58,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 14 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 15 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -283,14 +284,14 @@ uint8 buffHKWrite = 0;
 //#define COUNTER_PACKET_BYTES	(45u)
 
 typedef struct LowRateHousekeeping {
-	uint8 dle;
-    uint8 scienceDataID;//
-    uint8 dataLength;//
-    uint8 mainMajorV;//
-    uint8 mainMinorV;//
-    uint8 mainHK[66];//
-    uint8 eventHK[72];//
-    uint8 etx;//
+	uint8 dle; //0x10
+    uint8 scienceDataID;// 0x53
+    uint8 dataLength;//calculated from the sizeof
+    uint8 mainMajorV;//Major version of Main PSOC
+    uint8 mainMinorV;//Minor version of Main PSOC
+    uint8 mainHK[66];//Main housekeeping except header and footer
+    uint8 eventHK[72];//Event housekeeping Packed date thru percent live time
+    uint8 etx;//0x03
 } LowRateHousekeeping;
 
 LowRateHousekeeping lowRateHK;
@@ -362,11 +363,11 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x01, 0x21},  //Channel ToF 1 
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x40, 0x23},  //64 DAC Byte LSB
+	{0x20, 0x23},  //64 DAC Byte LSB
     {0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x02, 0x21},  //Channel ToF 2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x40, 0x23},  //64 DAC Byte LSB
+	{0x20, 0x23},  //64 DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5 T2
 	{0x00, 0x22},  //DAC Byte MSB
@@ -382,7 +383,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x0B, 0x22},  //11 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x08, 0x22},  //8 DAC Byte    
+	{0x0A, 0x22},  //10 DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
 	{0x01, 0x21},  //1 Mask Primary 
 	{0x02, 0x22},  //Trigger Mask 02 T1 T2 T4
@@ -764,7 +765,7 @@ int InitLRScienceData()
 {
     lowRateHK.dle = DLE;
     lowRateHK.scienceDataID = SDATA_ID;
-    lowRateHK.dataLength = 134;//66 from each HK and 2 for version
+    lowRateHK.dataLength = sizeof(lowRateHK) - 4;//adapt to changing sizes, 4 formatting bytes not included 
     lowRateHK.mainMajorV = MAJOR_VERSION;//version to start, try to avoid confusion with LR events
     lowRateHK.mainMinorV = MINOR_VERSION;//version to start, try to avoid confusion with LR events
     lowRateHK.etx = ETX;
@@ -781,7 +782,7 @@ int CheckLRScienceData()
         if(0 == UART_LR_Data_GetTxBufferSize()) //Requests only come once every 30 Sec so if the buffer is not empty
         {
             uint8 curMainHK = WRAPDEC(buffHKWrite, HK_BUFFER_PACKETS); //the packet prior to the current write is most likely complete or blank        
-            memcpy(lowRateHK.mainHK, buffHK[buffHKWrite].packedTimeDate, sizeof(lowRateHK.mainHK));//copy latest Main HK minus headers
+            memcpy(lowRateHK.mainHK, buffHK[curMainHK].packedTimeDate, sizeof(lowRateHK.mainHK));//copy latest Main HK minus headers
             //TODO event HK needs to be copaaesied in CheckeEventPackets 
             UART_LR_Data_PutArray((uint8 *) &lowRateHK, sizeof(lowRateHK));
             lowRateReq = FALSE; //might need to make a critical section but the buffer in transmision should avoid duplicate sends.
