@@ -46,6 +46,8 @@
  * V3.13 Added delay before RTC, fixed some RTC I2C bit ops
  * V3.14 Increased delay before RTC to 1 sec to give event PSOC startup time
  * V3.15 Fixed length of low rate, copy of mainHK & changed some init commands
+ * V3.16 Added missing values to Main HK execpt for Die Temp
+ * V3.17 Fixed bitmasking of Main HK
  *
  * ========================================
 */
@@ -58,7 +60,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 15 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 17 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -153,12 +155,12 @@ enum commandStatus {WAIT_DLE, CHECK_ID, CHECK_LEN, READ_CMD, CHECK_ETX_CMD, CHEC
 enum eventLowRateCopyState {NO_EVENT_LR_COPY, COPY_EVENT_HK, COPY_LAST_EVENT};//
 #define COMMAND_SOURCES 3
 enum commandStatus commandStatusC[COMMAND_SOURCES];
-enum eventLowRateCopyState eventLRCopy = COPY_EVENT_HK;
-uint8 commandLenC[COMMAND_SOURCES];
-uint8 cmdRxC[COMMAND_SOURCES][2];
+enum eventLowRateCopyState eventLRCopy = COPY_EVENT_HK;//default to HK copy
+uint8 commandLenC[COMMAND_SOURCES];//current command length expected from each source
+uint8 cmdRxC[COMMAND_SOURCES][2];//current commands bytes being received from each source
 #define COMMAND_CHARS	(4u)
 uint8 curCmd[COMMAND_CHARS+1]; //one extra char for null
-uint8 iCurCmd = 0u;
+//uint8 iCurCmd = 0u;
 //volatile uint8 timeoutDrdy = FALSE;
 //volatile uint8 lastDrdyCap = 0u;
 //#define MIN_DRDY_CYCLES 4 //8 //might need  Fster clock since the master clock generates noise the noise on this line
@@ -214,6 +216,9 @@ FmBufferIndex buffFrameDataWrite = 0;
 
 uint16 seqFrame2HB = 0; //2 Highest bytes of the frame seq (seqH & seqM) the seqL is set by init
 
+uint16 cntFramesDropped = 0; // number of frames overwritten before being sent via RS232
+uint16 cntFramesDroppedUSB = 0; // number of frames overwritten before being sent via USB
+
 #define HK_BUFFER_PACKETS	(2u) //Number of houskeeping packets to buffer, min 2 
 #define HK_PAD_SIZE	21 //number of padding bytes need for 
 //typedef struct HousekeepingPeriodic { //intended to Mimic Counter 1 (Power-Counter  Formats V3.txt) for early baro testing 
@@ -248,7 +253,7 @@ typedef struct HousekeepingPeriodic {
     uint8 commandErrors;//
     uint8 generalErrors;//
     uint8 missingValuesThisPacket;//
-    uint8 fifoPercentFull[1];//0-100
+    uint8 fifoPercentFull;//0-100
     uint8 framesDroppedRS232[2];//
     uint8 framesDroppedUSB[2];//
 	uint8 baroPres1[4];
@@ -297,20 +302,20 @@ typedef struct LowRateHousekeeping {
 LowRateHousekeeping lowRateHK;
 
 /* Defines for DMA_LR_Cmd_1 */
-#define DMA_LR_Cmd_1_BYTES_PER_BURST 1
-#define DMA_LR_Cmd_1_REQUEST_PER_BURST 1
-#define DMA_LR_Cmd_1_SRC_BASE (CYDEV_PERIPH_BASE)
-#define DMA_LR_Cmd_1_DST_BASE (CYDEV_SRAM_BASE)
-#define DMA_LR_Cmd_1_BUFFER_SIZE 16
-uint8 buffCmdRxC[COMMAND_SOURCES][DMA_LR_Cmd_1_BUFFER_SIZE];
-reg16 * buffCmdRxCWritePtr[COMMAND_SOURCES];
-uint8 buffCmdRxCRead[COMMAND_SOURCES];
-
+//#define DMA_LR_Cmd_1_BYTES_PER_BURST 1
+//#define DMA_LR_Cmd_1_REQUEST_PER_BURST 1
+//#define DMA_LR_Cmd_1_SRC_BASE (CYDEV_PERIPH_BASE)
+//#define DMA_LR_Cmd_1_DST_BASE (CYDEV_SRAM_BASE)
+//#define DMA_LR_Cmd_1_BUFFER_SIZE 16
+//uint8 buffCmdRxC[COMMAND_SOURCES][DMA_LR_Cmd_1_BUFFER_SIZE];
+//reg16 * buffCmdRxCWritePtr[COMMAND_SOURCES];
+//uint8 buffCmdRxCRead[COMMAND_SOURCES];
+//
 #define DMA_HR_Data_BYTES_PER_BURST 1
 #define DMA_HR_Data_REQUEST_PER_BURST 1
 #define DMA_HR_Data_SRC_BASE (CYDEV_SRAM_BASE)
 #define DMA_HR_Data_DST_BASE (CYDEV_PERIPH_BASE)
-//#define DMA_HR_Data_BUFFER_SIZE 16
+#define DMA_HR_Data_BUFFER_SIZE 16
 uint8 DMAHRDataChan = CY_DMA_INVALID_CHANNEL;
 uint8 DMAHRDataTd = CY_DMA_INVALID_TD;
 uint8 DMAHRDataActive = FALSE;
@@ -506,10 +511,14 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x0A, 0xB6},  //10sec Power R/O
     }; //End init cmds
 #define CMD_BUFFER_SIZE 256 // max value for index since init commands is getting longer than half buffer (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
-uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];
-uint8 readBuffCmd[COMMAND_SOURCES];// = 0;
-volatile uint8 writeBuffCmd[COMMAND_SOURCES];// = 0;
-uint8 orderBuffCmd[COMMAND_SOURCES];
+uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];// circular buffer of commands from all sources 
+uint8 readBuffCmd[COMMAND_SOURCES];//read indices for all command sources 
+volatile uint8 writeBuffCmd[COMMAND_SOURCES];//write indices for all command sources
+uint8 orderBuffCmd[COMMAND_SOURCES];//priority order for the command sources
+uint8 lastCmdSource = 0;//last command sources to send a command
+volatile uint16 cntCmd = 0;//count of commands recieved (not sent)
+uint8 cntCmdError = 0;//count of command errors
+uint8 cntError = 0;//count of general errors
 
 // Register pointers for the I2C chips
 const uint8 INA226_Config_Reg = 0x00;
@@ -697,6 +706,7 @@ int CmdBytes2String (uint8* in, uint8* out)
 {
     if ((NULL == in) || (NULL == (in + 1)) || (NULL == out)) //check for null pointers
     {
+        cntError++;
         return -EFAULT; //null pointer error, sprint might also do this
     }
 	return sprintf((char*)out, "%02X%02X", *(in), *(in + 1)); //converts the 2 bytes to hex with leading zerosv
@@ -740,7 +750,7 @@ int SendInitCmds()
 {
     if (CMD_BUFFER_SIZE <= (ACTIVELEN(readBuffCmd[0], writeBuffCmd[0], CMD_BUFFER_SIZE) + NUMBER_INIT_CMDS)) //check if space for commands
     {
-        //TODO error log
+        cntError++;
         return -ENOMEM;
     }
 	uint8 tempNumCmdLeft = NUMBER_INIT_CMDS;
@@ -791,7 +801,7 @@ int CheckLRScienceData()
         else
         {
             lowRateReq = FALSE; //might need to make a critical section but the buffer in transmision should avoid duplicate sends.
-            //TODO perhaps inc error
+            cntError++;
             return -EBUSY;
         }
     }
@@ -808,13 +818,24 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
         case CHECK_ID:
             if (CMD_ID == tempRx) commandStatusC[i] = CHECK_LEN;
             else if (REQ_ID == tempRx) commandStatusC[i] = CHECK_ETX_REQ;
+            else 
+            {
+                commandStatusC[i] = WAIT_DLE;
+                cntCmdError++;
+                return -EIDRM;
+            }
             break;
         case CHECK_LEN:
             if(2 == tempRx){
                 commandLenC[i] = tempRx;
                 commandStatusC[i] = READ_CMD;
             }
-            else commandStatusC[i] = WAIT_DLE;
+            else 
+            {
+                commandStatusC[i] = WAIT_DLE;
+                cntCmdError++;
+                return -E2BIG;
+            }
             break;
         case READ_CMD:
             if(commandLenC[i] > 0)
@@ -841,6 +862,8 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
                     writeBuffCmd[i] = WRAPINC(writeBuffCmd[i], CMD_BUFFER_SIZE);
                     CyExitCriticalSection(intState);
                     memcpy(buffCmd[i][tempWrite], cmdRxC[i], 2); //queue for later
+                    cntCmd++;
+                    lastCmdSource = i; //store last command source
 //                    }
 //                    else if (tempRes < 0)
 //                    {
@@ -850,7 +873,9 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
             }
             else 
             {
+                cntCmdError++;
                 //TODO error
+                return -EILSEQ;
             }
             commandStatusC[i] = WAIT_DLE;
             break;
@@ -862,7 +887,9 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
             }
             else 
             {
+                cntCmdError++;
                 //TODO error
+                return -EILSEQ;
             }
             commandStatusC[i] = WAIT_DLE;
             break;
@@ -990,6 +1017,7 @@ uint8 CheckI2C()
                 buffI2C[buffI2CRead].error = errors;
                 buffI2CRead = WRAPINC(buffI2CRead, I2C_BUFFER_SIZE);
                 numI2CRetry = 0;
+                cntError++;
             }
             else if ( 0 != (status & I2C_RTC_MSTAT_RD_CMPLT ))
             {
@@ -1000,6 +1028,7 @@ uint8 CheckI2C()
                 else 
                 {
                     buffI2C[buffI2CRead].error = I2C_RTC_MSTAT_ERR_MASK; //TODO new Error for thei mismatch
+                    cntError++;
                 }
                 buffI2CRead = WRAPINC(buffI2CRead, I2C_BUFFER_SIZE);
                 numI2CRetry = 0;
@@ -1013,6 +1042,7 @@ uint8 CheckI2C()
                 else 
                 {
                     buffI2C[buffI2CRead].error = I2C_RTC_MSTAT_ERR_MASK; //TODO new Error for thei mismatch
+                    cntError++;
                 }
                 buffI2CRead = WRAPINC(buffI2CRead, I2C_BUFFER_SIZE);
                 numI2CRetry = 0;
@@ -1024,6 +1054,7 @@ uint8 CheckI2C()
                     errors = I2C_RTC_MasterWriteBuf(buffI2C[buffI2CRead].slaveAddress, buffI2C[buffI2CRead].data, buffI2C[buffI2CRead].cnt, buffI2C[buffI2CRead].mode);
                     if (0 != errors)
                     {
+                        cntError++;
                         //TODO handle individual errors
                         numI2CRetry++;
                     }
@@ -1033,6 +1064,7 @@ uint8 CheckI2C()
                     errors = I2C_RTC_MasterReadBuf(buffI2C[buffI2CRead].slaveAddress, buffI2C[buffI2CRead].data, buffI2C[buffI2CRead].cnt, buffI2C[buffI2CRead].mode);
                     if (0 != errors)
                     {
+                        cntError++;
                         //TODO handle individual errors
                         numI2CRetry++;
                     }
@@ -1206,12 +1238,31 @@ uint8 CheckHKBuffer()
             }
             if (MAIN_HK_I2C_BUFFER_SIZE <= mainHKI2CRead)
             {
+                memcpy(buffHK[buffHKWrite].commandLast, buffCmd[lastCmdSource][WRAPDEC(writeBuffCmd[lastCmdSource], CMD_BUFFER_SIZE)], 2); //copy the last command recieved 
+                uint32 temp32 = cntCmd;
+                buffHK[buffHKWrite].commandCount[1] = temp32 & 0xFF; //LSB of command count
+                temp32 >>= 8;
+                buffHK[buffHKWrite].commandCount[0] = temp32 & 0xFF; //MSB of command count
+                buffHK[buffHKWrite].commandErrors = cntCmdError;
+                buffHK[buffHKWrite].generalErrors = cntError;
+                temp32 = ACTIVELEN(buffFrameDataRead, buffFrameDataWrite, FRAME_BUFFER_SIZE) * 100;
+                temp32 /= FRAME_BUFFER_SIZE;
+                buffHK[buffHKWrite].fifoPercentFull = temp32 & 0xFF;
+                temp32 = cntFramesDropped;
+                buffHK[buffHKWrite].commandCount[1] = temp32 & 0xFF; //LSB of command count
+                temp32 >>= 8;
+                buffHK[buffHKWrite].commandCount[0] = temp32 & 0xFF; //MSB of command count
+                temp32 = cntFramesDroppedUSB;
+                buffHK[buffHKWrite].commandCount[1] = temp32 & 0xFF; //LSB of command count
+                temp32 >>= 8;
+                buffHK[buffHKWrite].commandCount[0] = temp32 & 0xFF; //MSB of command count
                 buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
                 hkCollecting = FALSE;
                 ForcedSampleBaroI2C(); //Force sample next Baro
                 return 1;
             }
         }while(continueCheck);
+        
     }
     else if ((TRUE == hkReq)) //see if req is made by ISRCheckBaro
     {
@@ -1293,7 +1344,6 @@ uint8 CheckHKBuffer()
 //        }
 //        if ((0 != buffBaroCapNum[0][buffBaroCapNumWriteTemp]) && (buffBaroCapNum[0][buffBaroCapNumWriteTemp] == buffBaroCapNum[1][buffBaroCapNumWriteTemp])  && (buffBaroCapNum[2][buffBaroCapNumWriteTemp] == buffBaroCapNum[3][buffBaroCapNumWriteTemp])) buffHK[buffHKWrite].padding[0]=1;//DEBUG
 //        Pin_CE1_Write(buffHK[buffHKWrite].secs[3] % 2); //DEBUG timing on scope
-        buffHK[buffHKWrite].missingValuesThisPacket = 8;
         
         //load the data pointer of each
         mainHKI2C[0].data = buffHK[buffHKWrite].baroPres3;//I2C Address 1110000
@@ -1369,6 +1419,8 @@ uint8 CheckHKBuffer()
             
             
         }
+        buffHK[buffHKWrite].missingValuesThisPacket = 1;
+       
     }
     return 0;
 }
@@ -1488,9 +1540,6 @@ int8 CheckEventPackets()
     }
     return 0;
 }
-
-uint32 cntFramesDropped = 0; // number of frames overwritten before being sent via RS232
-uint32 cntFramesDroppedUSB = 0; // number of frames overwritten before being sent via USB
 
 int8 CheckFrameBuffer()
 {
@@ -1891,16 +1940,18 @@ uint8 CheckRTC()
         uint8 curRTSI2CTrans2 = WRAPINC(curRTSI2CTrans, I2C_BUFFER_SIZE);
         if ( (0 != buffI2C[curRTSI2CTrans].error) && ( ISELEMENTDONE(curRTSI2CTrans, buffI2CRead, buffI2CWrite)))
         {
+            cntError++;
             //TODO error handling
-            rtcStatus |= RTS_SET_MAIN; //Retry forever DEBUG
+//            rtcStatus |= RTS_SET_MAIN; //Retry forever DEBUG
             rtcStatus ^= RTS_SET_MAIN_INP;
         }
         else if (ISELEMENTDONE(curRTSI2CTrans2, buffI2CRead, buffI2CWrite))
         {
             if (0 != buffI2C[curRTSI2CTrans2].error)
             {
+                cntError++;
                 //TODO error handling
-                rtcStatus |= RTS_SET_MAIN; //Retry forever DEBUG
+//                rtcStatus |= RTS_SET_MAIN; //Retry forever DEBUG
                 rtcStatus ^= RTS_SET_MAIN_INP;
             }   
             else
@@ -1923,6 +1974,7 @@ uint8 CheckRTC()
         {
             if (0 != buffI2C[curRTSI2CTrans].error)
             {
+                cntError++;
                 //TODO error handling
                 rtcStatus |= RTS_SET_I2C; //Retry  forever DEBUG
             }
@@ -1988,7 +2040,8 @@ uint8 CheckRTC()
         uint8 tmpOrder = orderBuffCmd[0];
         if (CMD_BUFFER_SIZE <= (ACTIVELEN(readBuffCmd[tmpOrder], writeBuffCmd[tmpOrder], CMD_BUFFER_SIZE) + 11)) //check if space for commands
         {
-            //TODO error log
+            cntError++;
+            //TODO errr log
             return -ENOMEM;
         }
         //TOD0 check that this doesn't pass read index in the command buffer
@@ -2061,7 +2114,7 @@ CY_ISR(ISRCheckCmd)
             int tempRes = ParseCmdInputByte(UART_LR_Cmd_1_ReadRxData(), i);
             if (0 > tempRes)
             {
-                //TODO error handling
+                //TODO error handling additional
             }
             
                 
@@ -2077,7 +2130,7 @@ CY_ISR(ISRCheckCmd)
             int tempRes = ParseCmdInputByte(UART_LR_Cmd_2_ReadRxData(), i);
             if (0 > tempRes)
             {
-                //TODO error handling
+                //TODO error handling additional
             }
             
                 
@@ -2142,6 +2195,7 @@ CY_ISR(ISRReadSPI)
 	}
 	else 
 	{
+        cntError++;
         //TODO Error hadling
 //		Control_Reg_CD_Write(0x00u);
         continueRead = FALSE;
@@ -2239,192 +2293,193 @@ CY_ISR(ISRReadEv)
 //	CyExitCriticalSection(intState);
 //}
 
-CY_ISR(ISRHRTx)
-{
-
-	uint8 tempStatus;// = UART_HR_Data_ReadTxStatus();
-//	uint8 intState = CyEnterCriticalSection();
-//	UART_HR_Data_PutArray(buffSPIWrite, 34);
-//	isr_HR_Disable();
-//	if (UART_HR_Data_GetTxBufferSize() <= 1) for(uint8 x=0;x<34;x++) UART_HR_Data_PutChar(x);
-//	tempStatus = UART_HR_Data_ReadTxStatus();
-//	isr_HR_ClearPending();
-//	isr_HR_Enable();
-	
-//	if (0) //TODO integrate Baro and SPI to buffframedata
-	if (UART_HR_Data_GetTxBufferSize() <= 1)
-	{
-//	if (FALSE !=((UART_HR_Data_TX_STS_FIFO_EMPTY | UART_HR_Data_TX_STS_COMPLETE) & tempStatus))
+//CY_ISR(ISRHRTx)
+//{
+//
+//	uint8 tempStatus;// = UART_HR_Data_ReadTxStatus();
+////	uint8 intState = CyEnterCriticalSection();
+////	UART_HR_Data_PutArray(buffSPIWrite, 34);
+////	isr_HR_Disable();
+////	if (UART_HR_Data_GetTxBufferSize() <= 1) for(uint8 x=0;x<34;x++) UART_HR_Data_PutChar(x);
+////	tempStatus = UART_HR_Data_ReadTxStatus();
+////	isr_HR_ClearPending();
+////	isr_HR_Enable();
+//	
+////	if (0) //TODO integrate Baro and SPI to buffframedata
+//	if (UART_HR_Data_GetTxBufferSize() <= 1)
 //	{
-//		UART_HR_Data_PutArray((uint8 *)(&frameCnt), 3); //little endian, need big endian
-		
-		uint8 buffFrame[34];
-		uint8 ibuffFrame = 0;
-		
-		for (int i = 2; i >= 0; i--)
-		{
-			buffFrame[ibuffFrame] = *((uint8*)(((uint8*) &frameCnt) + i)); //this converts to big endian 3 byte counter
-			UART_HR_Data_PutChar(buffFrame[ibuffFrame]);
-			ibuffFrame++;
-		}
-		uint8 nullFrame = FALSE;
-		EvBufferIndex nDataBytesLeft = FRAME_DATA_BYTES;
-//		memcpy( (buffFrame + ibuffFrame), &(frameCnt), 3);
-//		ibuffFrame += 3;
-		frameCnt++;
-		memcpy( (buffFrame + ibuffFrame), frameSync, 2);
-		ibuffFrame += 2;
-		memcpy( (buffFrame + ibuffFrame), frameSync, 2);
-		ibuffFrame += 2;
-//		buffUsbTxDebug[iBuffUsbTxDebug++] = '{';
-//		buffUsbTxDebug[iBuffUsbTxDebug++] = packetFIFOHead;
-//		buffUsbTxDebug[iBuffUsbTxDebug++] = '+';
-//		buffUsbTxDebug[iBuffUsbTxDebug++] = packetFIFOTail;
-//		buffUsbTxDebug[iBuffUsbTxDebug++] = '}';
-//        if (FALSE) //DEBUG let event buffer fill
-        if (FRAME_DATA_BYTES <= WRAP(EV_BUFFER_SIZE - buffEvRead + buffEvWrite, EV_BUFFER_SIZE)) //Full frame of event data
-        {
-            EvBufferIndex nBytes;
-            EvBufferIndex curRead = buffEvRead;
-			EvBufferIndex curEOR = WRAP(curRead + (FRAME_DATA_BYTES - 1), EV_BUFFER_SIZE);
-			
-			if (curEOR > curRead)
-			{
-				nBytes = FRAME_DATA_BYTES;
-			}
-			else
-			{
-				nBytes = EV_BUFFER_SIZE - curRead;
-			}
-			memcpy( (buffFrame + ibuffFrame), buffEv + curRead, nBytes);
-			ibuffFrame += nBytes;
-			nDataBytesLeft -= nBytes;
+////	if (FALSE !=((UART_HR_Data_TX_STS_FIFO_EMPTY | UART_HR_Data_TX_STS_COMPLETE) & tempStatus))
+////	{
+////		UART_HR_Data_PutArray((uint8 *)(&frameCnt), 3); //little endian, need big endian
+//		
+//		uint8 buffFrame[34];
+//		uint8 ibuffFrame = 0;
+//		
+//		for (int i = 2; i >= 0; i--)
+//		{
+//			buffFrame[ibuffFrame] = *((uint8*)(((uint8*) &frameCnt) + i)); //this converts to big endian 3 byte counter
+//			UART_HR_Data_PutChar(buffFrame[ibuffFrame]);
+//			ibuffFrame++;
+//		}
+//		uint8 nullFrame = FALSE;
+//		EvBufferIndex nDataBytesLeft = FRAME_DATA_BYTES;
+////		memcpy( (buffFrame + ibuffFrame), &(frameCnt), 3);
+////		ibuffFrame += 3;
+//		frameCnt++;
+//		memcpy( (buffFrame + ibuffFrame), frameSync, 2);
+//		ibuffFrame += 2;
+//		memcpy( (buffFrame + ibuffFrame), frameSync, 2);
+//		ibuffFrame += 2;
+////		buffUsbTxDebug[iBuffUsbTxDebug++] = '{';
+////		buffUsbTxDebug[iBuffUsbTxDebug++] = packetFIFOHead;
+////		buffUsbTxDebug[iBuffUsbTxDebug++] = '+';
+////		buffUsbTxDebug[iBuffUsbTxDebug++] = packetFIFOTail;
+////		buffUsbTxDebug[iBuffUsbTxDebug++] = '}';
+////        if (FALSE) //DEBUG let event buffer fill
+//        if (FRAME_DATA_BYTES <= WRAP(EV_BUFFER_SIZE - buffEvRead + buffEvWrite, EV_BUFFER_SIZE)) //Full frame of event data
+//        {
+//            EvBufferIndex nBytes;
+//            EvBufferIndex curRead = buffEvRead;
+//			EvBufferIndex curEOR = WRAP(curRead + (FRAME_DATA_BYTES - 1), EV_BUFFER_SIZE);
+//			
+//			if (curEOR > curRead)
+//			{
+//				nBytes = FRAME_DATA_BYTES;
+//			}
+//			else
+//			{
+//				nBytes = EV_BUFFER_SIZE - curRead;
+//			}
+//			memcpy( (buffFrame + ibuffFrame), buffEv + curRead, nBytes);
+//			ibuffFrame += nBytes;
+//			nDataBytesLeft -= nBytes;
+////				curRead += (nBytes - 1); //avoiding overflow with - 1 , will add later
+//
+//			if (nDataBytesLeft > 0) //more data to fill frame
+//			{
+//                memcpy( (buffFrame + ibuffFrame), buffEv, nDataBytesLeft);
+//			    ibuffFrame += nDataBytesLeft;
+//			    nDataBytesLeft = 0;
+//			}
+//			curRead = WRAPINC(curEOR, EV_BUFFER_SIZE);
+//            //TODO MUTEX or volatile
+//            buffEvRead = curRead;
+//        }
+//		else if (packetFIFOHead == packetFIFOTail)
+//		{
+//			nullFrame = TRUE;
+//		}
+//		else
+//		{
+//			uint8 curSPIDev = packetFIFO[packetFIFOHead].index;
+//			SPIBufferIndex nBytes;
+//			SPIBufferIndex curEOR= packetFIFO[packetFIFOHead].EOR;
+//			SPIBufferIndex curRead = buffSPIRead[curSPIDev];
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = '|';
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = curSPIDev;
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = '[';
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = curRead;
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = '-';
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = curEOR;
+////			buffUsbTxDebug[iBuffUsbTxDebug++] = ']';
+//			while((packetFIFOHead != packetFIFOTail) && (nDataBytesLeft > 0))
+//			{
+//				if (curEOR >= curRead)
+//				{
+//					nBytes = MIN(((curEOR - curRead) + 1), nDataBytesLeft);
+//				}
+//				else
+//				{
+//					nBytes = MIN(SPI_BUFFER_SIZE - curRead, nDataBytesLeft);
+//				}
+//				memcpy( (buffFrame + ibuffFrame), buffSPI[curSPIDev] + curRead, nBytes);
+//				ibuffFrame += nBytes;
+//				nDataBytesLeft -= nBytes;
+////				curRead += (nBytes); //avoiding overflow with - 1 , will add later
 //				curRead += (nBytes - 1); //avoiding overflow with - 1 , will add later
-
-			if (nDataBytesLeft > 0) //more data to fill frame
-			{
-                memcpy( (buffFrame + ibuffFrame), buffEv, nDataBytesLeft);
-			    ibuffFrame += nDataBytesLeft;
-			    nDataBytesLeft = 0;
-			}
-			curRead = WRAPINC(curEOR, EV_BUFFER_SIZE);
-            //TODO MUTEX or volatile
-            buffEvRead = curRead;
-        }
-		else if (packetFIFOHead == packetFIFOTail)
-		{
-			nullFrame = TRUE;
-		}
-		else
-		{
-			uint8 curSPIDev = packetFIFO[packetFIFOHead].index;
-			SPIBufferIndex nBytes;
-			SPIBufferIndex curEOR= packetFIFO[packetFIFOHead].EOR;
-			SPIBufferIndex curRead = buffSPIRead[curSPIDev];
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = '|';
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = curSPIDev;
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = '[';
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = curRead;
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = '-';
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = curEOR;
-//			buffUsbTxDebug[iBuffUsbTxDebug++] = ']';
-			while((packetFIFOHead != packetFIFOTail) && (nDataBytesLeft > 0))
-			{
-				if (curEOR >= curRead)
-				{
-					nBytes = MIN(((curEOR - curRead) + 1), nDataBytesLeft);
-				}
-				else
-				{
-					nBytes = MIN(SPI_BUFFER_SIZE - curRead, nDataBytesLeft);
-				}
-				memcpy( (buffFrame + ibuffFrame), buffSPI[curSPIDev] + curRead, nBytes);
-				ibuffFrame += nBytes;
-				nDataBytesLeft -= nBytes;
-//				curRead += (nBytes); //avoiding overflow with - 1 , will add later
-				curRead += (nBytes - 1); //avoiding overflow with - 1 , will add later
-//				if ((curRead - 1)== curEOR)
-				if ((curRead)== curEOR)
-				{
-                    curRead = WRAPINC(curRead, SPI_BUFFER_SIZE); //last increment, handling the wrap
-					buffSPIRead[curSPIDev]= curRead % SPI_BUFFER_SIZE;
-					packetFIFOHead = WRAPINC(packetFIFOHead, PACKET_FIFO_SIZE);
-					if (packetFIFOHead != packetFIFOTail) 
-					{
-						curSPIDev = packetFIFO[packetFIFOHead].index;
-						curEOR = packetFIFO[packetFIFOHead].EOR;
-						curRead = buffSPIRead[curSPIDev];
-					}
-				}
-//				else if (curRead >= (SPI_BUFFER_SIZE))
-				else if (curRead >= (SPI_BUFFER_SIZE - 1))
-				{
-					curRead = buffSPIRead[curSPIDev] = 0;
-				}
-				else
-				{
-                    curRead = WRAPINC(curRead, SPI_BUFFER_SIZE); //last increment, handling the wrap
-					buffSPIRead[curSPIDev] = curRead;
-				}
-			}
-		}
-		while (nDataBytesLeft > 0)
-		{
-			buffFrame[ibuffFrame] = NULL_HEAD;
-//			UART_HR_Data_PutChar(NULL_HEAD);
-			ibuffFrame++;
-			nDataBytesLeft--;
-			if (nDataBytesLeft > 1)
-			{
-				memcpy( &(buffFrame[ibuffFrame]), frame00FF, 2);
-				ibuffFrame += 2;
-				nDataBytesLeft -= 2;
-			}
-			else //TODO this is an alignment error
-			{
-				if (1 == nDataBytesLeft)
-				{
-					buffFrame[ibuffFrame] = NULL_HEAD;
-					ibuffFrame++;
-					nDataBytesLeft--;
-				}
-			}
-		}
-		UART_HR_Data_PutArray((uint8 *)(buffFrame + 3), 31); //already sent the 3 byte counter, send rest of frame
-		if (TRUE != nullFrame)
-		{
-			memcpy((buffUsbTx + iBuffUsbTx), buffFrame, 34);
-			iBuffUsbTx += 34;
-		}
-	}
-	tempStatus = UART_HR_Data_ReadTxStatus();
-	if ((0u != USBUART_CD_GetConfiguration()) )//&& (iBuffUsbTx > 0))
-		{
- 
-			/* Wait until component is ready to send data to host. */
-			if (USBUART_CD_CDCIsReady()) // && ((iBuffUsbTx > 0) || (iBuffUsbTxDebug > 0)))
-			{
-				if (iBuffUsbTx > 0)
-				{
-					USBUART_CD_PutData(buffUsbTx, iBuffUsbTx);
-					iBuffUsbTx = 0; //TODO handle missed writes
-				}
-				if (iBuffUsbTxDebug > 0)
-				{
-					while (0 == USBUART_CD_CDCIsReady());
-					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
-					iBuffUsbTxDebug = 0; //TODO handle missed writes
-				}
-			}
-		}
-		else
-		{
-			iBuffUsbTx = 0; //TODO handle missed writes
-			iBuffUsbTxDebug = 0; //TODO handle missed writes
-		}
-
-//	CyExitCriticalSection(intState);
-}
+////				if ((curRead - 1)== curEOR)
+//				if ((curRead)== curEOR)
+//				{
+//                    curRead = WRAPINC(curRead, SPI_BUFFER_SIZE); //last increment, handling the wrap
+//					buffSPIRead[curSPIDev]= curRead % SPI_BUFFER_SIZE;
+//					packetFIFOHead = WRAPINC(packetFIFOHead, PACKET_FIFO_SIZE);
+//					if (packetFIFOHead != packetFIFOTail) 
+//					{
+//						curSPIDev = packetFIFO[packetFIFOHead].index;
+//						curEOR = packetFIFO[packetFIFOHead].EOR;
+//						curRead = buffSPIRead[curSPIDev];
+//					}
+//				}
+////				else if (curRead >= (SPI_BUFFER_SIZE))
+//				else if (curRead >= (SPI_BUFFER_SIZE - 1))
+//				{
+//					curRead = buffSPIRead[curSPIDev] = 0;
+//				}
+//				else
+//				{
+//                    curRead = WRAPINC(curRead, SPI_BUFFER_SIZE); //last increment, handling the wrap
+//					buffSPIRead[curSPIDev] = curRead;
+//				}
+//			}
+//		}
+//		while (nDataBytesLeft > 0)
+//		{
+//			buffFrame[ibuffFrame] = NULL_HEAD;
+////			UART_HR_Data_PutChar(NULL_HEAD);
+//			ibuffFrame++;
+//			nDataBytesLeft--;
+//			if (nDataBytesLeft > 1)
+//			{
+//				memcpy( &(buffFrame[ibuffFrame]), frame00FF, 2);
+//				ibuffFrame += 2;
+//				nDataBytesLeft -= 2;
+//			}
+//			else //TODO this is an alignment error
+//			{
+//				if (1 == nDataBytesLeft)
+//				{
+//					buffFrame[ibuffFrame] = NULL_HEAD;
+//					ibuffFrame++;
+//					nDataBytesLeft--;
+//				}
+//                cntError++;
+//			}
+//		}
+//		UART_HR_Data_PutArray((uint8 *)(buffFrame + 3), 31); //already sent the 3 byte counter, send rest of frame
+//		if (TRUE != nullFrame)
+//		{
+//			memcpy((buffUsbTx + iBuffUsbTx), buffFrame, 34);
+//			iBuffUsbTx += 34;
+//		}
+//	}
+//	tempStatus = UART_HR_Data_ReadTxStatus();
+//	if ((0u != USBUART_CD_GetConfiguration()) )//&& (iBuffUsbTx > 0))
+//		{
+// 
+//			/* Wait until component is ready to send data to host. */
+//			if (USBUART_CD_CDCIsReady()) // && ((iBuffUsbTx > 0) || (iBuffUsbTxDebug > 0)))
+//			{
+//				if (iBuffUsbTx > 0)
+//				{
+//					USBUART_CD_PutData(buffUsbTx, iBuffUsbTx);
+//					iBuffUsbTx = 0; //TODO handle missed writes
+//				}
+//				if (iBuffUsbTxDebug > 0)
+//				{
+//					while (0 == USBUART_CD_CDCIsReady());
+//					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
+//					iBuffUsbTxDebug = 0; //TODO handle missed writes
+//				}
+//			}
+//		}
+//		else
+//		{
+//			iBuffUsbTx = 0; //TODO handle missed writes
+//			iBuffUsbTxDebug = 0; //TODO handle missed writes
+//		}
+//
+////	CyExitCriticalSection(intState);
+//}
 CY_ISR(ISRBaroCap)
 {
 //	isr_B_ClearPending();
@@ -2672,7 +2727,7 @@ int main(void)
 	memset(buffBaroCapRead, 0, NUM_BARO);
 	memset(buffBaroCapWrite, 0, NUM_BARO);
     memset(commandStatusC, WAIT_DLE, COMMAND_SOURCES);
-    memset(buffCmdRxCRead, 0, COMMAND_SOURCES);
+//    memset(buffCmdRxCRead, 0, COMMAND_SOURCES);
     memset(readBuffCmd, 0, COMMAND_SOURCES);
     memset(writeBuffCmd, 0, COMMAND_SOURCES);
     
@@ -3238,6 +3293,7 @@ int main(void)
 				break;
 				
 			case EORERROR:
+                cntError++;
 			case EORFOUND:  
 //				Control_Reg_CD_Write(0u);
                 (*tabSPISel[iSPIDev])(0u);//select low to make sure
@@ -3299,114 +3355,114 @@ int main(void)
         CheckRTC();
 		//TODO Framing packets
 			 /* Service USB CDC when device is configured. */
-		if ((0u != USBUART_CD_GetConfiguration()) )//&& (iBuffUsbTx > 0))
-		{
- 
-			/* Wait until component is ready to send data to host. */
-			if (USBUART_CD_CDCIsReady()) // && ((iBuffUsbTx > 0) || (iBuffUsbTxDebug > 0)))
-			{
-//				if ((0 == iBuffUsbTx) && (0 == iBuffUsbTxDebug) && (0 == Pin_BaroPres_Read()) && (0 == Pin_BaroTemp_Read()) && (0 != baroReadReady)) // TODO Temporary barometer read, in future should be a Tsync interrupt
+//		if ((0u != USBUART_CD_GetConfiguration()) )//&& (iBuffUsbTx > 0))
+//		{
+// 
+//			/* Wait until component is ready to send data to host. */
+//			if (USBUART_CD_CDCIsReady()) // && ((iBuffUsbTx > 0) || (iBuffUsbTxDebug > 0)))
+//			{
+////				if ((0 == iBuffUsbTx) && (0 == iBuffUsbTxDebug) && (0 == Pin_BaroPres_Read()) && (0 == Pin_BaroTemp_Read()) && (0 != baroReadReady)) // TODO Temporary barometer read, in future should be a Tsync interrupt
+////				{
+////					curBaroPresCnt[0] = Counter_BaroPres_ReadCapture();
+////					curBaroTempCnt[0] = Counter_BaroTemp_ReadCapture();
+////					double U = (double)((double) curBaroTempCnt[0] / (double) BARO_COUNT_TO_US) - baroCE[0].U0;
+////					double Tao = (double)((double) curBaroPresCnt[0] / (double) BARO_COUNT_TO_US);
+////					curBaroTemp[0] = BaroTempCalc(U, baroCE);
+////					curBaroPres[0] = BaroPresCalc(Tao, U, baroCE);
+////					uint32 curBaroTempInt = (uint32) curBaroTemp[0];
+////					uint32 curBaroPresInt = (uint32) curBaroPres[0];
+//////					buffUsbTxDebug[0] = '^';
+//////					iBuffUsbTxDebug++;
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroPresCnt), 4);
+//////					iBuffUsbTxDebug += 4;
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&Tao), sizeof(double));
+//////					iBuffUsbTxDebug += sizeof(double);
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroPres), sizeof(double));
+//////					iBuffUsbTxDebug += sizeof(double);
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&curBaroPresInt), sizeof(uint32));
+//////					iBuffUsbTxDebug += sizeof(uint32);
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), "^!", 2);
+//////					iBuffUsbTxDebug += 2;
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroTempCnt), 4);
+//////					iBuffUsbTxDebug += 4;
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&U), sizeof(double));
+//////					iBuffUsbTxDebug += sizeof(double);
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroTemp), sizeof(double));
+//////					iBuffUsbTxDebug += sizeof(double);
+//////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&curBaroTempInt), sizeof(uint32));
+//////					iBuffUsbTxDebug += sizeof(uint32);
+//////					buffUsbTxDebug[iBuffUsbTxDebug] = '!';
+//////					iBuffUsbTxDebug++;
+////					Tao = 1.1; 
+////					curBaroPres[0] = 22.22; 
+////					U = 333.333;
+////					curBaroTemp[0] = 4444.4444;
+////					Tao = 2.3E-3;//08;
+////					U = 1.7E+3;//08;
+////					U /= Tao;
+////					iBuffUsbTxDebug = sprintf( (char *) buffUsbTxDebug, "^ %lu, %f, %f^! %lu, %f, %f!", curBaroPresCnt[0], Tao, curBaroPres[0], curBaroTempCnt[0], U, curBaroTemp[0]); //1.1, 22.22, curBaroTempCnt[0], 333.333, 4444.4444);
+////					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
+////					iBuffUsbTxDebug = 0;
+////					baroReadReady = 0u;
+////					
+////				}
+////				else if (0 != Pin_BaroPres_Read())
+////				{
+////					baroReadReady = 1u;
+////				}
+//				if (iBuffUsbTx > 0)
 //				{
-//					curBaroPresCnt[0] = Counter_BaroPres_ReadCapture();
-//					curBaroTempCnt[0] = Counter_BaroTemp_ReadCapture();
-//					double U = (double)((double) curBaroTempCnt[0] / (double) BARO_COUNT_TO_US) - baroCE[0].U0;
-//					double Tao = (double)((double) curBaroPresCnt[0] / (double) BARO_COUNT_TO_US);
-//					curBaroTemp[0] = BaroTempCalc(U, baroCE);
-//					curBaroPres[0] = BaroPresCalc(Tao, U, baroCE);
-//					uint32 curBaroTempInt = (uint32) curBaroTemp[0];
-//					uint32 curBaroPresInt = (uint32) curBaroPres[0];
-////					buffUsbTxDebug[0] = '^';
-////					iBuffUsbTxDebug++;
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroPresCnt), 4);
-////					iBuffUsbTxDebug += 4;
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&Tao), sizeof(double));
-////					iBuffUsbTxDebug += sizeof(double);
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroPres), sizeof(double));
-////					iBuffUsbTxDebug += sizeof(double);
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&curBaroPresInt), sizeof(uint32));
-////					iBuffUsbTxDebug += sizeof(uint32);
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), "^!", 2);
-////					iBuffUsbTxDebug += 2;
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroTempCnt), 4);
-////					iBuffUsbTxDebug += 4;
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&U), sizeof(double));
-////					iBuffUsbTxDebug += sizeof(double);
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (curBaroTemp), sizeof(double));
-////					iBuffUsbTxDebug += sizeof(double);
-////					memcpy((buffUsbTxDebug + iBuffUsbTxDebug), (&curBaroTempInt), sizeof(uint32));
-////					iBuffUsbTxDebug += sizeof(uint32);
-////					buffUsbTxDebug[iBuffUsbTxDebug] = '!';
-////					iBuffUsbTxDebug++;
-//					Tao = 1.1; 
-//					curBaroPres[0] = 22.22; 
-//					U = 333.333;
-//					curBaroTemp[0] = 4444.4444;
-//					Tao = 2.3E-3;//08;
-//					U = 1.7E+3;//08;
-//					U /= Tao;
-//					iBuffUsbTxDebug = sprintf( (char *) buffUsbTxDebug, "^ %lu, %f, %f^! %lu, %f, %f!", curBaroPresCnt[0], Tao, curBaroPres[0], curBaroTempCnt[0], U, curBaroTemp[0]); //1.1, 22.22, curBaroTempCnt[0], 333.333, 4444.4444);
-//					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
-//					iBuffUsbTxDebug = 0;
-//					baroReadReady = 0u;
+////					for(uint8 x = 0; x < iBuffUsbTx; x += USBUART_BUFFER_SIZE)
+////					{
+////						uint8 iTemp = iBuffUsbTx - x;
+////						iTemp = MIN(iTemp, USBUART_BUFFER_SIZE);
+////						uint8 tempS[4] = {'m', x, iTemp, 'n'};
+////						USBUART_CD_PutData(tempS, 4);
+////						while (0 == USBUART_CD_CDCIsReady());
+//						USBUART_CD_PutData(buffUsbTx, iBuffUsbTx);
+////						if (USBUART_BUFFER_SIZE == iTemp)
+////						{
+////							CyDelayUs(53333);
+////						}
+////					}
+////					USBUART_CD_PutChar('#');
+////					USBUART_CD_PutData((const uint8*)(&(iBuffUsbTx)), 1);
+////					char tempS[3];
+////					sprintf(tempS,"%i", iBuffUsbTx);
+////					USBUART_CD_PutString(tempS);
+////					USBUART_CD_PutChar('#');
+////					uint8 tempS[3] = {'#', iBuffUsbTx, '#'};
+////					while (0 == USBUART_CD_CDCIsReady());
+////					USBUART_CD_PutData(tempS, 3);
+//					iBuffUsbTx = 0; //TODO handle missed writes
 //					
 //				}
-//				else if (0 != Pin_BaroPres_Read())
-//				{
-//					baroReadReady = 1u;
-//				}
-				if (iBuffUsbTx > 0)
-				{
-//					for(uint8 x = 0; x < iBuffUsbTx; x += USBUART_BUFFER_SIZE)
-//					{
-//						uint8 iTemp = iBuffUsbTx - x;
-//						iTemp = MIN(iTemp, USBUART_BUFFER_SIZE);
-//						uint8 tempS[4] = {'m', x, iTemp, 'n'};
-//						USBUART_CD_PutData(tempS, 4);
-//						while (0 == USBUART_CD_CDCIsReady());
-						USBUART_CD_PutData(buffUsbTx, iBuffUsbTx);
-//						if (USBUART_BUFFER_SIZE == iTemp)
-//						{
-//							CyDelayUs(53333);
-//						}
-//					}
-//					USBUART_CD_PutChar('#');
-//					USBUART_CD_PutData((const uint8*)(&(iBuffUsbTx)), 1);
-//					char tempS[3];
-//					sprintf(tempS,"%i", iBuffUsbTx);
-//					USBUART_CD_PutString(tempS);
-//					USBUART_CD_PutChar('#');
-//					uint8 tempS[3] = {'#', iBuffUsbTx, '#'};
-//					while (0 == USBUART_CD_CDCIsReady());
-//					USBUART_CD_PutData(tempS, 3);
-					iBuffUsbTx = 0; //TODO handle missed writes
-					
-				}
-//				if (iBuffUsbTxDebug > 0)
-//				{
-//					while (0 == USBUART_CD_CDCIsReady());
-//					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
-//					iBuffUsbTxDebug = 0; //TODO handle missed writes
-//				}
-				
-				
-		
-				//iBuffUsbTx = 0;
-			}
-			
-		}
-//		else
-//		{
+////				if (iBuffUsbTxDebug > 0)
+////				{
+////					while (0 == USBUART_CD_CDCIsReady());
+////					USBUART_CD_PutData(buffUsbTxDebug, iBuffUsbTxDebug);
+////					iBuffUsbTxDebug = 0; //TODO handle missed writes
+////				}
+//				
+//				
+//		
+//				//iBuffUsbTx = 0;
+//			}
+//			
+//		}
+////		else
+////		{
 		iBuffUsbTx = 0; //TODO handle missed writes
 		iBuffUsbTxDebug = 0; //TODO handle missed writes
-//		}
-		
-				/* Send data back to host. */
-			   
-//				NewTransmit = FALSE;
-//
-//
-//			}
-//		}
+////		}
+//		
+//				/* Send data back to host. */
+//			   
+////				NewTransmit = FALSE;
+////
+////
+////			}
+////		}
         loopCount++;
 	}
 }
