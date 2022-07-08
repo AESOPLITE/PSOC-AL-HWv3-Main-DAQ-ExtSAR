@@ -49,6 +49,7 @@
  * V3.16 Added missing values to Main HK execpt for Die Temp
  * V3.17 Fixed bitmasking of Main HK
  * V3.18 Fixed frame dropped packet copy, added DieTemp Measurement
+ * V3.19 Removed obsolete init timing calibration, changed init T2 threshold 
  *
  * ========================================
 */
@@ -61,7 +62,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 18 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 19 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -363,21 +364,21 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(42 + 83 + 5 + 6 + 2 + 1)//segments are divived by comments for easier counting
+#define NUMBER_INIT_CMDS	(42 + 83 + 5 + 6 + 0 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Event PSOC DAQ Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x01, 0x21},  //Channel ToF 1 
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x20, 0x23},  //64 DAC Byte LSB
+	{0x20, 0x23},  //32 DAC Byte LSB
     {0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x02, 0x21},  //Channel ToF 2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x20, 0x23},  //64 DAC Byte LSB
+	{0x20, 0x23},  //32 DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5 T2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x14, 0x23},  //20 DAC Byte LSB
+	{0x0F, 0x23},  //15 DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
 	{0x06, 0x22},  //6 DAC Byte
@@ -506,8 +507,8 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x05, 0x21},  //5 min Rate
     {0x03, 0x20},  //Header For Read Errors. Init errors proir to this will be sent & cleared
 	//Startup FPGA Input Timing Calibration
-    {0x48, 0x21},  //Header for FPGA Input Timing Calibration
-	{0x08, 0x21},  //All FPGA. This command takes time so prefer not to issue an Event PSOC command after
+//    {0x48, 0x21},  //Header for FPGA Input Timing Calibration //obsolete in v100 tracker firmware
+//	{0x08, 0x21},  //All FPGA. This command takes time so prefer not to issue an Event PSOC command after
     //Power Board Setup. Placed here to prevent a newly issued Event PSOC command from following 0x48 command 
 	{0x0A, 0xB6},  //10sec Power R/O
     }; //End init cmds
