@@ -48,6 +48,7 @@
  * V3.15 Fixed length of low rate, copy of mainHK & changed some init commands
  * V3.16 Added missing values to Main HK execpt for Die Temp
  * V3.17 Fixed bitmasking of Main HK
+ * V3.18 Fixed frame dropped packet copy, added DieTemp Measurement
  *
  * ========================================
 */
@@ -60,7 +61,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 17 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 18 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -660,11 +661,13 @@ volatile uint8 lowRateReq = FALSE; //state to request low rate science data pack
 
 //const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 1.0, .Y1 = 1.0, .Y2 = 1.0, .Y3 = 1.0, .C1 = 1.0, .C2 = 1.0, .C3 = 1.0, .D1 = 1.0, .D2 = 1.0, .T1 = 1.0, .T2 = 1.0, .T3 = 1.0, .T4 = 1.0, .T5 = 1.0 }};
 //const BaroCoEff baroCE[NUM_BARO] = {{.U0 = 5.875516, .Y1 = -3947.926, .Y2 = -10090.9, .Y3 = 0.0, .C1 = 95.4503, .C2 = 2.982818, .C3 = -135.3036, .D1 = 0.042247, .D2 = 0.0, .T1 = 27.91302, .T2 = 0.873949, .T3 = 21.00155, .T4 = 36.63574, .T5 = 0.0 }};
-double curBaroTemp[NUM_BARO];
-double curBaroPres[NUM_BARO];
+//double curBaroTemp[NUM_BARO];
+//double curBaroPres[NUM_BARO];
 uint32 curBaroTempCnt[NUM_BARO];
 uint32 curBaroPresCnt[NUM_BARO];
 uint32 baroReadReady = 0u;
+
+int16 dieTemp;//temperature of the PSOC from system call
 
 uint8 loopCount = 0;
 uint8 loopCountCheck = 0;
@@ -1249,14 +1252,29 @@ uint8 CheckHKBuffer()
                 temp32 /= FRAME_BUFFER_SIZE;
                 buffHK[buffHKWrite].fifoPercentFull = temp32 & 0xFF;
                 temp32 = cntFramesDropped;
-                buffHK[buffHKWrite].commandCount[1] = temp32 & 0xFF; //LSB of command count
+                buffHK[buffHKWrite].framesDroppedRS232[1] = temp32 & 0xFF; //LSB of Dropped RS232 packets
                 temp32 >>= 8;
-                buffHK[buffHKWrite].commandCount[0] = temp32 & 0xFF; //MSB of command count
+                buffHK[buffHKWrite].framesDroppedRS232[0] = temp32 & 0xFF; //MSB of Dropped RS232 packets
                 temp32 = cntFramesDroppedUSB;
-                buffHK[buffHKWrite].commandCount[1] = temp32 & 0xFF; //LSB of command count
+                buffHK[buffHKWrite].framesDroppedUSB[1] = temp32 & 0xFF; //LSB of Dropped USB packets
                 temp32 >>= 8;
-                buffHK[buffHKWrite].commandCount[0] = temp32 & 0xFF; //MSB of command count
+                buffHK[buffHKWrite].framesDroppedUSB[0] = temp32 & 0xFF; //MSB of Dropped USB packets
                 buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
+                if  (CYRET_SUCCESS == DieTemp_Main_Query(&dieTemp))
+                {
+                    int16 temp16 = dieTemp; //signed 16 bit from -40 to 140
+                    buffHK[buffHKWrite].coreDieTemp[1] = temp16 & 0xFF; //LSB of core temp
+                    temp16 >>= 8;
+                    buffHK[buffHKWrite].coreDieTemp[0] = temp16 & 0xFF; //MSB of core temp
+                }
+                else
+                {
+                    buffHK[buffHKWrite].missingValuesThisPacket++;
+                    buffHK[buffHKWrite].coreDieTemp[0] = 0x80; //MSB of core temp, Max negative number is out-of-range error indicator 
+                    buffHK[buffHKWrite].coreDieTemp[1] = 0x00; //LSB of core temp
+                    cntError++;// TODO could check specific error
+                }
+                buffHK[buffHKWrite].generalErrors = cntError;
                 hkCollecting = FALSE;
                 ForcedSampleBaroI2C(); //Force sample next Baro
                 return 1;
@@ -1419,7 +1437,8 @@ uint8 CheckHKBuffer()
             
             
         }
-        buffHK[buffHKWrite].missingValuesThisPacket = 1;
+        DieTemp_Main_Start();//start the temp conversion and Query the result at that end of HK. TODO could check error returns but handled at Query for now
+        buffHK[buffHKWrite].missingValuesThisPacket = 0;
        
     }
     return 0;
@@ -2719,8 +2738,8 @@ int main(void)
 	memset(buffSPICurHead, 0, NUM_SPI_DEV);
 	memset(buffSPICompleteHead, 0, NUM_SPI_DEV);
 	memset(buffUsbTx, 0, USBUART_BUFFER_SIZE);
-	memset(curBaroTemp, 0, (sizeof(double) * NUM_BARO));
-	memset(curBaroPres, 0, (sizeof(double) *  NUM_BARO));
+//	memset(curBaroTemp, 0, (sizeof(double) * NUM_BARO));
+//	memset(curBaroPres, 0, (sizeof(double) *  NUM_BARO));
 	memset(curBaroTempCnt, 0, (sizeof(uint32) * NUM_BARO));
 	memset(curBaroPresCnt, 0, (sizeof(uint32) * NUM_BARO));
 	memset(buffBaroCap, 0, (sizeof(uint16) * (NUM_BARO * NUM_BARO_CAPTURES)));
