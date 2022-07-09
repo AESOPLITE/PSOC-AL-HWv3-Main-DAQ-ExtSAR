@@ -50,6 +50,7 @@
  * V3.17 Fixed bitmasking of Main HK
  * V3.18 Fixed frame dropped packet copy, added DieTemp Measurement
  * V3.19 Removed obsolete init timing calibration, changed init T2 threshold 
+ * V3.20 Added Busy Event PSOC Signal Pin
  *
  * ========================================
 */
@@ -62,7 +63,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 19 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 20 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -670,6 +671,10 @@ uint32 baroReadReady = 0u;
 
 int16 dieTemp;//temperature of the PSOC from system call
 
+uint8 outputBusy = FALSE; //state for Pin_Busy, True when fram fifo queue is above a threshold
+uint8 outputBusyHighThres = 80; //high threhold of fifo percentage
+uint8 outputBusyLowThres = 70; //low threhold of fifo percentage
+
 uint8 loopCount = 0;
 uint8 loopCountCheck = 0;
 #define SELECT_HIGH_LOOPS 250
@@ -1252,6 +1257,16 @@ uint8 CheckHKBuffer()
                 temp32 = ACTIVELEN(buffFrameDataRead, buffFrameDataWrite, FRAME_BUFFER_SIZE) * 100;
                 temp32 /= FRAME_BUFFER_SIZE;
                 buffHK[buffHKWrite].fifoPercentFull = temp32 & 0xFF;
+                if ((TRUE == outputBusy) && (outputBusyLowThres >= buffHK[buffHKWrite].fifoPercentFull))
+                {
+                    outputBusy = FALSE;
+                    Pin_Busy_Write(outputBusy);// no longer signal busy
+                }
+                else if ((FALSE == outputBusy) && (outputBusyHighThres <= buffHK[buffHKWrite].fifoPercentFull))
+                {
+                    outputBusy = TRUE;
+                    Pin_Busy_Write(outputBusy);//signal busy
+                }
                 temp32 = cntFramesDropped;
                 buffHK[buffHKWrite].framesDroppedRS232[1] = temp32 & 0xFF; //LSB of Dropped RS232 packets
                 temp32 >>= 8;
@@ -1260,7 +1275,6 @@ uint8 CheckHKBuffer()
                 buffHK[buffHKWrite].framesDroppedUSB[1] = temp32 & 0xFF; //LSB of Dropped USB packets
                 temp32 >>= 8;
                 buffHK[buffHKWrite].framesDroppedUSB[0] = temp32 & 0xFF; //MSB of Dropped USB packets
-                buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
                 if  (CYRET_SUCCESS == DieTemp_Main_Query(&dieTemp))
                 {
                     int16 temp16 = dieTemp; //signed 16 bit from -40 to 140
@@ -1276,6 +1290,7 @@ uint8 CheckHKBuffer()
                     cntError++;// TODO could check specific error
                 }
                 buffHK[buffHKWrite].generalErrors = cntError;
+                buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
                 hkCollecting = FALSE;
                 ForcedSampleBaroI2C(); //Force sample next Baro
                 return 1;
@@ -2821,8 +2836,8 @@ int main(void)
 //	Control_Reg_SS_Write(tabSPISel[0u]);
 //	Control_Reg_CD_Write(1u);
 	
-	
-	
+    Pin_Busy_Write(outputBusy);//signal not busy by default
+    
 	isr_R_StartEx(ISRReadSPI);
 	isr_W_StartEx(ISRWriteSPI);
 //	isr_C_StartEx(ISRDrdyCap);
