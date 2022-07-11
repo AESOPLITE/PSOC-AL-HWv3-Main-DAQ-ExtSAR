@@ -499,7 +499,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x08, 0x21},  //8 Layers. This command takes time so prefer not to issue an Event PSOC command after
     //HV Control Board Setup. Placed here to prevent Event PSOC command following 0x56 command 
 	{0xAF, 0x35}, //T1 1500V High Voltage
-	{0xCC, 0x36}, //T2 1751V High Voltage
+	{0xCC, 0x36}, //T2 1718V High Voltage
 	{0xC6, 0x37}, //T3 1671V High Voltage
 	{0xBF, 0xB5}, //T4 1603V High Voltage
 	{0xD1, 0x74}, //G  1757V High Voltage
