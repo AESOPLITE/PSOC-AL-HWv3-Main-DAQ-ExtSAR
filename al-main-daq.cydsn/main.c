@@ -52,6 +52,7 @@
  * V3.19 Removed obsolete init timing calibration, changed init T2 threshold 
  * V3.20 Added Busy Event PSOC Signal Pin
  * V3.21 Frame Buffer increased to availiable SRAM, removed init commands obsolete by new Event PSOC firmware
+ * V3.22 Change init commands for layer 6 tracker swap
  *
  * ========================================
 */
@@ -64,7 +65,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 21 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 22 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -489,7 +490,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x00, 0x60},  //Tracker A
     {0x04, 0x61},  //Tracker E
     {0x05, 0x62},  //Tracker F
-    {0x08, 0x63},  //Tracker I
+    {0x06, 0x63},  //Tracker G
     {0x03, 0xA0},  //Tracker D
     {0x5B, 0x21},  //Header for Tracker Threshold Increase command. Only gets loaded by 0x56 command 
 	{0x06, 0x21},  //Increase tracker threshold by 6
