@@ -51,6 +51,7 @@
  * V3.18 Fixed frame dropped packet copy, added DieTemp Measurement
  * V3.19 Removed obsolete init timing calibration, changed init T2 threshold 
  * V3.20 Added Busy Event PSOC Signal Pin
+ * V3.21 Frame Buffer increased to availiable SRAM, removed init commands obsolete by new Event PSOC firmware
  *
  * ========================================
 */
@@ -63,7 +64,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 20 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 21 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -199,7 +200,7 @@ uint8 buffUsbTxDebug[USBUART_BUFFER_SIZE];
 uint8 iBuffUsbTxDebug = 0;
 
 #define FRAME_DATA_BYTES	(27u)
-#define FRAME_BUFFER_BLOCKS	(1u) //Number of blocks in the buffer, should me changed based on availiaable SRAM. 256 frames takes about 14%
+#define FRAME_BUFFER_BLOCKS	(6u) //Number of blocks in the buffer, should me changed based on availiaable SRAM. 256 frames takes about 14%
 #define FRAME_BUFFER_BLOCK_SIZE	(256u) //choosen so LSB of seq can be preset in buffer
 #define FRAME_BUFFER_SIZE	(FRAME_BUFFER_BLOCKS * FRAME_BUFFER_BLOCK_SIZE) //Calculate size, do not change 
 typedef struct FrameOutput {
@@ -365,7 +366,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(42 + 83 + 5 + 6 + 0 + 1)//segments are divived by comments for easier counting
+#define NUMBER_INIT_CMDS	(38 + 83 + 5 + 6 + 0 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Event PSOC DAQ Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
@@ -404,10 +405,10 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x02, 0x21},  //2 PMT
 	{0x01, 0x22},  //Prescale by 1     
-    {0x3A, 0x21},  //Header for Trigger Window Settling Time Set
-    {0x30, 0x21},  //Settling Time 48. Default 24 TODO Tune
-    {0x4B, 0x21},  //Header for Peak Detector Charge Time Set
-	{0x20, 0x21},  //32 cycle delay. Default 32 TODO Tune
+//    {0x3A, 0x21},  //Header for Trigger Window Settling Time Set
+//    {0x30, 0x21},  //Settling Time 48. Default 24 TODO Tune
+//    {0x4B, 0x21},  //Header for Peak Detector Charge Time Set
+//	{0x20, 0x21},  //32 cycle delay. Default 32 TODO Tune
     {0x4F, 0x21},  //Header for PMT Tracker Trigger Delay Set
 	{0x0C, 0x21},  //12 cycle delay 
     //Event PSOC Tracker Setup
