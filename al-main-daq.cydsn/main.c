@@ -53,6 +53,7 @@
  * V3.20 Added Busy Event PSOC Signal Pin
  * V3.21 Frame Buffer increased to availiable SRAM, removed init commands obsolete by new Event PSOC firmware
  * V3.22 Change init commands for layer 6 tracker swap
+ * V3.23 Change init commands for T2 & T3
  *
  * ========================================
 */
@@ -65,7 +66,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 22 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 23 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -498,8 +499,8 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x08, 0x21},  //8 Layers. This command takes time so prefer not to issue an Event PSOC command after
     //HV Control Board Setup. Placed here to prevent Event PSOC command following 0x56 command 
 	{0xAF, 0x35}, //T1 1500V High Voltage
-	{0xD0, 0x36}, //T2 1751V High Voltage
-	{0xCA, 0x37}, //T3 1705V High Voltage
+	{0xCC, 0x36}, //T2 1751V High Voltage
+	{0xC6, 0x37}, //T3 1671V High Voltage
 	{0xBF, 0xB5}, //T4 1603V High Voltage
 	{0xD1, 0x74}, //G  1757V High Voltage
     //Event PSOC Housekeeping Setup
