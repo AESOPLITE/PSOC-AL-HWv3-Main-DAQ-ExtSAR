@@ -54,6 +54,7 @@
  * V3.21 Frame Buffer increased to availiable SRAM, removed init commands obsolete by new Event PSOC firmware
  * V3.22 Change init commands for layer 6 tracker swap
  * V3.23 Change init commands for T2 & T3
+ * V3.24 Copy 3 more event HK bytes
  *
  * ========================================
 */
@@ -66,7 +67,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 23 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 24 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -301,7 +302,7 @@ typedef struct LowRateHousekeeping {
     uint8 mainMajorV;//Major version of Main PSOC
     uint8 mainMinorV;//Minor version of Main PSOC
     uint8 mainHK[66];//Main housekeeping except header and footer
-    uint8 eventHK[72];//Event housekeeping Packed date thru percent live time
+    uint8 eventHK[75];//Event housekeeping Packed date thru percent live time
     uint8 etx;//0x03
 } LowRateHousekeeping;
 
