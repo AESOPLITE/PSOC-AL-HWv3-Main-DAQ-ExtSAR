@@ -55,6 +55,7 @@
  * V3.22 Change init commands for layer 6 tracker swap
  * V3.23 Change init commands for T2 & T3
  * V3.24 Copy 3 more event HK bytes
+ * V4.0 Added main command interpretation, starting with RTC
  *
  * ========================================
 */
@@ -66,8 +67,8 @@
 #include "math.h"
 #include "errno.h"
 
-#define MAJOR_VERSION 3 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 24 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
+#define MINOR_VERSION 0 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -522,6 +523,8 @@ uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];// circular buffer of command
 uint8 readBuffCmd[COMMAND_SOURCES];//read indices for all command sources 
 volatile uint8 writeBuffCmd[COMMAND_SOURCES];//write indices for all command sources
 uint8 orderBuffCmd[COMMAND_SOURCES];//priority order for the command sources
+uint8 headerBuffCmd[COMMAND_SOURCES];//Header of command being interpreted if any
+uint8 interpretBuffCmd[COMMAND_SOURCES];//Next byte of command being interpreted if any
 uint8 lastCmdSource = 0;//last command sources to send a command
 volatile uint16 cntCmd = 0;//count of commands recieved (not sent)
 uint8 cntCmdError = 0;//count of command errors
@@ -1008,6 +1011,39 @@ int CheckCmdBuffers()
             return 1;
         }
     }
+    return 0;
+}
+
+int InterpretCmdBuffers()
+{
+    uint8 search4Cmd = TRUE, i = 0;
+    uint8 curChan = orderBuffCmd[i];
+    
+    
+    do //search for 1 command for the main PSOC, only interpreting 1 per main program loop
+    {
+        if(headerBuffCmd[curChan] == writeBuffCmd[curChan])
+        {
+            i++;
+            if(i < COMMAND_SOURCES)
+            {
+                curChan = orderBuffCmd[i];
+            }
+            else 
+            {
+                return 0;
+            }
+        }
+        else
+        {
+            if(headerBuffCmd[curChan] == interpretBuffCmd[curChan])
+            {
+                
+            }
+        }
+            
+    }while(TRUE == search4Cmd);
+    
     return 0;
 }
 
