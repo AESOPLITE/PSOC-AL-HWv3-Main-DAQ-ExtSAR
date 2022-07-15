@@ -518,7 +518,11 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Power Board Setup. Placed here to prevent a newly issued Event PSOC command from following 0x48 command 
 	{0x0A, 0xB6},  //10sec Power R/O
     }; //End init cmds
-#define CMD_BUFFER_SIZE 256 // max value for index since init commands is getting longer than half buffer (NUMBER_INIT_CMDS + NUMBER_INIT_CMDS)
+#define CMD_BUFFER_SIZE 256 // max value for index since init commands is got longer than half buffer
+#define CMD_MAIN_PSOC_ADDRESS 0b00101000 // Middle nibble of the second command byte is the address (0b1010 for Main PSOC, Event is 0b1000)
+#define CMD_MAIN_FIRST_BYTE 0b00101001 // Middle nibble of the second command byte is the address (0b1010 for Main PSOC, Event is 0b1000)
+#define CMD_ADDRESS_MASK 0b00111100 // Middle nibble of the second command byte mask for address
+#define CMD_NUM_BYTE_MASK 0b11000011 // Outer nibble of the second command byte mask for number of bytes
 uint8 buffCmd[COMMAND_SOURCES][CMD_BUFFER_SIZE][2];// circular buffer of commands from all sources 
 uint8 readBuffCmd[COMMAND_SOURCES];//read indices for all command sources 
 volatile uint8 writeBuffCmd[COMMAND_SOURCES];//write indices for all command sources
@@ -1018,8 +1022,7 @@ int InterpretCmdBuffers()
 {
     uint8 search4Cmd = TRUE, i = 0;
     uint8 curChan = orderBuffCmd[i];
-    
-    
+    uint8 lastAdr;
     do //search for 1 command for the main PSOC, only interpreting 1 per main program loop
     {
         if(headerBuffCmd[curChan] == writeBuffCmd[curChan])
@@ -1031,19 +1034,115 @@ int InterpretCmdBuffers()
             }
             else 
             {
-                return 0;
+                return 0; //nothing to interpret
             }
         }
         else
         {
+            uint8 headAdr;
             if(headerBuffCmd[curChan] == interpretBuffCmd[curChan])
             {
-                
+                headAdr = buffCmd[curChan][headerBuffCmd[curChan]][1];
+                interpretBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                if (CMD_MAIN_PSOC_ADDRESS == (headAdr & CMD_ADDRESS_MASK))
+                {
+                    if (0 == (headAdr & CMD_NUM_BYTE_MASK))
+                    {
+                        search4Cmd = FALSE;
+                    }
+                    else
+                    {
+                        lastAdr = headAdr;
+                    }
+                }
+                else
+                {
+                    headerBuffCmd[curChan] = WRAPINC(headerBuffCmd[curChan], CMD_BUFFER_SIZE);
+                    return 0; //everytime a header changes return & check next time
+                }
+            }
+            else
+            {
+                lastAdr = buffCmd[curChan][WRAPDEC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE)][1];
+                headAdr = buffCmd[curChan][headerBuffCmd[curChan]][1];
+            }
+            while (TRUE == search4Cmd)
+            {
+                if (interpretBuffCmd[curChan] == writeBuffCmd[curChan])
+                {
+                    i++;
+                    if(i < COMMAND_SOURCES)
+                    {
+                        curChan = orderBuffCmd[i];
+                    }
+                    else 
+                    {
+                        return 0; //nothing to interpret
+                    }
+                    break; //check next availiable channel in outer while loop
+                }
+                uint8 curAdr =  buffCmd[curChan][interpretBuffCmd[curChan]][1];
+                if(curAdr == headAdr) //end of multibyte command
+                {
+                    uint8 numDataBytes = ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                    numDataBytes = ((numDataBytes & 0xC) << 4) | (numDataBytes & 3); //shifted to outer nibble
+                    if ( numDataBytes == ( CMD_ADDRESS_MASK & headAdr ))
+                    {
+                        search4Cmd = FALSE;
+                    }
+                    else
+                    {
+                        headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                        cntCmdError++;
+                        return -EILSEQ;
+                    }
+                }
+                else if (lastAdr == headAdr)
+                {
+                    if (CMD_MAIN_FIRST_BYTE == curAdr)
+                    {
+                        lastAdr = curAdr; //byte inc correctly 
+                        interpretBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                    }
+                    else
+                    {
+                        headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                        cntCmdError++;
+                        return -EILSEQ;
+                    }
+                }
+                else
+                {
+                    uint8 curAdrDiff = curAdr - lastAdr;
+                    switch (curAdrDiff)
+                    {
+                        case 1:
+                            break;
+                        case 29: 
+                            if(3 == (lastAdr & 3))
+                            {
+                                break;//byte increment skipping middle address nibble
+                            }
+                        default:
+                            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                            cntCmdError++;
+                            return -EILSEQ;
+                    }
+                    lastAdr = curAdr; //byte inc correctly 
+                    interpretBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                }
             }
         }
             
     }while(TRUE == search4Cmd);
     
+    uint8 cmdID = buffCmd[curChan][headerBuffCmd[curChan]][0];
+    switch(cmdID)
+    {
+        default:
+            headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+            interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+    }
     return 0;
 }
 
