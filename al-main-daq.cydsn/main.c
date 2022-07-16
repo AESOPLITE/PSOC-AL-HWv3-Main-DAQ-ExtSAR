@@ -1086,7 +1086,7 @@ int InterpretCmdBuffers()
                 {
                     uint8 numDataBytes = ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
                     numDataBytes = ((numDataBytes & 0xC) << 4) | (numDataBytes & 3); //shifted to outer nibble
-                    if ( numDataBytes == ( CMD_ADDRESS_MASK & headAdr ))
+                    if ( numDataBytes == ( CMD_NUM_BYTE_MASK & headAdr ))
                     {
                         search4Cmd = FALSE;
                     }
@@ -1118,7 +1118,7 @@ int InterpretCmdBuffers()
                     {
                         case 1:
                             break;
-                        case 29: 
+                        case 61: 
                             if(3 == (lastAdr & 3))
                             {
                                 break;//byte increment skipping middle address nibble
@@ -1137,13 +1137,42 @@ int InterpretCmdBuffers()
     }while(TRUE == search4Cmd);
     
     uint8 cmdID = buffCmd[curChan][headerBuffCmd[curChan]][0];
+    uint8 curBuffCmd;
     switch(cmdID)
     {
-        default:
+        case 0x45:
+            if (7 != ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE))
+            {
+                headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            curBuffCmd = WRAPINC(headerBuffCmd[curChan], CMD_BUFFER_SIZE);
+            mainTimeDate.Sec = buffCmd[curChan][curBuffCmd][0] % 60;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.Min = buffCmd[curChan][curBuffCmd][0] % 60;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.Hour = buffCmd[curChan][curBuffCmd][0] % 24;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.DayOfMonth = buffCmd[curChan][curBuffCmd][0] % 31;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.Month = buffCmd[curChan][curBuffCmd][0] % 12;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.Year = buffCmd[curChan][curBuffCmd][0];
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            mainTimeDate.Year <<= 8;
+            mainTimeDate.Year |= buffCmd[curChan][curBuffCmd][0];
+            RTC_Main_WriteTime(&mainTimeDate);
+//            RTC_Main_Init();//Sets RTC variables DEBUG
             headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+            return 1;
+        default:
+            break;
     }
-    return 0;
+    headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+    interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+    return -ENXIO;
 }
 
 uint8 CheckI2C()
@@ -2138,6 +2167,7 @@ uint8 CheckRTC()
                 mainTimeDate.Month = BCD2Dec(dataRTCI2C[6] & 0x1F);
                 mainTimeDate.Year = BCD2Dec(dataRTCI2C[7]) + 2000;
                 RTC_Main_WriteTime(&mainTimeDate);
+//                RTC_Main_Init();//Sets RTC variables DEBUG
                 rtcStatus ^= RTS_SET_MAIN_INP;
             }
         }
@@ -3065,6 +3095,7 @@ int main(void)
         tempRes = CheckFrameBuffer(); //TODO Move order of this call
         tempRes = CheckHKBuffer(); //TODO Move order of this call
         tempRes = CheckLRScienceData(); //TODO Move order of this call
+        tempRes = InterpretCmdBuffers(); //TODO Move order of this call
         
         
 		//if (SPIM_BP_GetRxBufferSize > 0)
