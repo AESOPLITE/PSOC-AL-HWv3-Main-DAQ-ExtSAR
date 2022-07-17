@@ -1159,7 +1159,7 @@ int InterpretCmdBuffers()
     switch(cmdID)
     {
         case 0x01 ... 0xF:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
@@ -1168,8 +1168,8 @@ int InterpretCmdBuffers()
             hkSecs = cmdID & 0x0F;
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
-        case 0x31 ... 3xF:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+        case 0x31 ... 0x3F:
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
@@ -1179,7 +1179,7 @@ int InterpretCmdBuffers()
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x40:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
@@ -1241,7 +1241,7 @@ int InterpretCmdBuffers()
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
             return 1;
         case 0x48:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
@@ -1251,7 +1251,7 @@ int InterpretCmdBuffers()
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x49:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
@@ -1261,7 +1261,7 @@ int InterpretCmdBuffers()
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x4A:
-            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
                 headerBuffCmd[curChan] = interpretBuffCmd[curChan];
