@@ -58,6 +58,7 @@
  * V4.0 Added main command interpretation, starting with RTC Main Set from command
  * V4.1 Added another command order check
  * V4.2 Added Event PSOC Reset commnds
+ * V4.3 Added FIFO busy and counter command
  *
  * ========================================
 */
@@ -70,7 +71,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 2 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 3 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1156,9 +1157,37 @@ int InterpretCmdBuffers()
     uint8 curBuffCmd;
     switch(cmdID)
     {
+        case 0x40:
+            cntError = 0;
+            cntCmdError = 0;
+            cntFramesDropped = 0;
+            cntFramesDroppedUSB = 0;
+            return 1;
+        case 0x41:
+            if (2 != ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE))
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+                interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            curBuffCmd = WRAPINC(headerBuffCmd[curChan], CMD_BUFFER_SIZE);
+            outputBusyLowThres = buffCmd[curChan][curBuffCmd][0] % 99;
+            curBuffCmd = WRAPINC(curBuffCmd, CMD_BUFFER_SIZE);
+            outputBusyHighThres = buffCmd[curChan][curBuffCmd][0] % 99;
+            if (0 == outputBusyHighThres)
+            {
+                outputBusyHighThres = 1;
+            }
+            if (outputBusyLowThres > outputBusyHighThres)
+            {
+                outputBusyHighThres = outputBusyLowThres;
+            }
+            return 1;
         case 0x45:
             if (7 != ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE))
             {
+                cntCmdError++;
                 headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
                 interpretBuffCmd[curChan] = headerBuffCmd[curChan];
                 return -ENOEXEC;
@@ -1195,6 +1224,7 @@ int InterpretCmdBuffers()
         default:
             break;
     }
+    cntCmdError++;
     headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
     interpretBuffCmd[curChan] = headerBuffCmd[curChan];
     return -ENXIO;
@@ -1454,11 +1484,13 @@ uint8 CheckHKBuffer()
                 {
                     outputBusy = FALSE;
                     Pin_Busy_Write(outputBusy);// no longer signal busy
+                    Pin_LED2_Write(outputBusy);
                 }
                 else if ((FALSE == outputBusy) && (outputBusyHighThres <= buffHK[buffHKWrite].fifoPercentFull))
                 {
                     outputBusy = TRUE;
                     Pin_Busy_Write(outputBusy);//signal busy
+                    Pin_LED2_Write(outputBusy);
                 }
                 temp32 = cntFramesDropped;
                 buffHK[buffHKWrite].framesDroppedRS232[1] = temp32 & 0xFF; //LSB of Dropped RS232 packets
@@ -1486,6 +1518,7 @@ uint8 CheckHKBuffer()
                 buffHKWrite = WRAPINC( buffHKWrite , HK_BUFFER_PACKETS );
                 hkCollecting = FALSE;
                 ForcedSampleBaroI2C(); //Force sample next Baro
+                Pin_LED1_Write(0);
                 return 1;
             }
         }while(continueCheck);
@@ -1493,6 +1526,7 @@ uint8 CheckHKBuffer()
     }
     else if ((TRUE == hkReq)) //see if req is made by ISRCheckBaro
     {
+        Pin_LED1_Write(1);
         hkCollecting = TRUE;
         uint8 intState = CyEnterCriticalSection();
         hkReq = FALSE;
@@ -2927,6 +2961,8 @@ CY_ISR(ISRBaroCap)
 
 int main(void)
 {
+    Pin_LED1_Write(1);
+    Pin_LED2_Write(1);
 //	uint8 status;
 //	uint8 fillByte = 0xA3u;
 //	cmdBuff[CMDBUFFSIZE - 1] = FILLBYTE;
@@ -3113,6 +3149,8 @@ int main(void)
     SendInitCmds();//Enqueued all init commands
 	isr_Cm_Enable();//Since init commands are enqueued, start interrupts for more commands
     InitBaroI2COTP();//start the process of getting these OTP coefficients once
+    Pin_LED1_Write(0);
+    Pin_LED2_Write(0);
 	for(;;)
 	{
 		
