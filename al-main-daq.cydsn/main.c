@@ -55,7 +55,8 @@
  * V3.22 Change init commands for layer 6 tracker swap
  * V3.23 Change init commands for T2 & T3
  * V3.24 Copy 3 more event HK bytes
- * V4.0 Added main command interpretation, starting with RTC
+ * V4.0 Added main command interpretation, starting with RTC Main Set from command
+ * V4.1 Added another command order check
  *
  * ========================================
 */
@@ -68,7 +69,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 0 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 1 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1113,6 +1114,12 @@ int InterpretCmdBuffers()
                 }
                 else
                 {
+                    if (curAdr < lastAdr)
+                    {
+                        headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                        cntCmdError++;
+                        return -EILSEQ;
+                    }
                     uint8 curAdrDiff = curAdr - lastAdr;
                     switch (curAdrDiff)
                     {
