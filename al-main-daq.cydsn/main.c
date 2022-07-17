@@ -57,6 +57,7 @@
  * V3.24 Copy 3 more event HK bytes
  * V4.0 Added main command interpretation, starting with RTC Main Set from command
  * V4.1 Added another command order check
+ * V4.2 Added Event PSOC Reset commnds
  *
  * ========================================
 */
@@ -69,7 +70,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 1 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 2 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1024,6 +1025,14 @@ int InterpretCmdBuffers()
     uint8 search4Cmd = TRUE, i = 0;
     uint8 curChan = orderBuffCmd[i];
     uint8 lastAdr;
+    if (0 == Pin_Reset_Ev_HW_Read())
+    {
+        Pin_Reset_Ev_HW_Write(1);
+    }
+    if (0 != Pin_Reset_Ev_SW_Read())
+    {
+        Pin_Reset_Ev_SW_Write(0);
+    }
     do //search for 1 command for the main PSOC, only interpreting 1 per main program loop
     {
         if(headerBuffCmd[curChan] == writeBuffCmd[curChan])
@@ -1173,6 +1182,15 @@ int InterpretCmdBuffers()
 //            RTC_Main_Init();//Sets RTC variables DEBUG
             headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+            return 1;
+        case 0x48:
+            Pin_Reset_Ev_HW_Write(0);
+            return 1;
+        case 0x49:
+            Pin_Reset_Ev_SW_Write(1);
+            return 1;
+        case 0x4A:
+            SendInitCmds();
             return 1;
         default:
             break;
@@ -2941,6 +2959,8 @@ int main(void)
 //    memset(buffCmdRxCRead, 0, COMMAND_SOURCES);
     memset(readBuffCmd, 0, COMMAND_SOURCES);
     memset(writeBuffCmd, 0, COMMAND_SOURCES);
+    memset(headerBuffCmd, 0, COMMAND_SOURCES);
+    memset(interpretBuffCmd, 0, COMMAND_SOURCES);
     
     for (uint8 i = 0; i < COMMAND_SOURCES; i++)
     {
