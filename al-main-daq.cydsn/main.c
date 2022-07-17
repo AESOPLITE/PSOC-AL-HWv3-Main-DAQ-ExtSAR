@@ -59,6 +59,7 @@
  * V4.1 Added another command order check
  * V4.2 Added Event PSOC Reset commnds
  * V4.3 Added FIFO busy and counter command
+ * V4.4 Added range commands for HK rate and RTC status bits
  *
  * ========================================
 */
@@ -71,7 +72,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 3 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 4 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -1157,18 +1158,44 @@ int InterpretCmdBuffers()
     uint8 curBuffCmd;
     switch(cmdID)
     {
+        case 0x01 ... 0xF:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            hkSecs = cmdID & 0x0F;
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+            return 1;
+        case 0x31 ... 3xF:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            rtcStatus |= cmdID & 0x0F;
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+            return 1;
         case 0x40:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
             cntError = 0;
             cntCmdError = 0;
             cntFramesDropped = 0;
             cntFramesDroppedUSB = 0;
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x41:
             if (2 != ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE))
             {
                 cntCmdError++;
-                headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
-                interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
                 return -ENOEXEC;
             }
             curBuffCmd = WRAPINC(headerBuffCmd[curChan], CMD_BUFFER_SIZE);
@@ -1183,13 +1210,14 @@ int InterpretCmdBuffers()
             {
                 outputBusyHighThres = outputBusyLowThres;
             }
+            headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
+            interpretBuffCmd[curChan] = headerBuffCmd[curChan];
             return 1;
         case 0x45:
             if (7 != ACTIVELEN(headerBuffCmd[curChan], interpretBuffCmd[curChan], CMD_BUFFER_SIZE))
             {
                 cntCmdError++;
-                headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
-                interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
                 return -ENOEXEC;
             }
             curBuffCmd = WRAPINC(headerBuffCmd[curChan], CMD_BUFFER_SIZE);
@@ -1213,20 +1241,40 @@ int InterpretCmdBuffers()
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
             return 1;
         case 0x48:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
             Pin_Reset_Ev_HW_Write(0);
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x49:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
             Pin_Reset_Ev_SW_Write(1);
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         case 0x4A:
+            if (CMD_MAIN_PSOC_ADDRESS != headAdr)
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
             SendInitCmds();
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         default:
             break;
     }
     cntCmdError++;
-    headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
-    interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+    headerBuffCmd[curChan] = interpretBuffCmd[curChan];
     return -ENXIO;
 }
 
