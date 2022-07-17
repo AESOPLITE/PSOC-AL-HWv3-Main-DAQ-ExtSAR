@@ -60,6 +60,7 @@
  * V4.2 Added Event PSOC Reset commnds
  * V4.3 Added FIFO busy and counter command
  * V4.4 Added range commands for HK rate and RTC status bits
+ * V4.5 Added Software Reset Main directly in ISR
  *
  * ========================================
 */
@@ -72,7 +73,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 4 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 5 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -875,25 +876,29 @@ int ParseCmdInputByte(uint8 tempRx, uint8 i)
             if (ETX == tempRx)
             {
                 
-                int tempRes = CmdBytes2String(cmdRxC[i], curCmd);
-                if(tempRes >= 0)
-                {
+//                int tempRes = CmdBytes2String(cmdRxC[i], curCmd);
+//                if(tempRes >= 0)
+//                {
 //                    tempRes = SendCmdString(curCmd);  //TODO change this with considerations for commands like RTC set and duplicates
 //                    if (-EBUSY == tempRes)
 //                    {
-                    uint8 intState = CyEnterCriticalSection();
-                    uint8 tempWrite = writeBuffCmd[i];
-                    writeBuffCmd[i] = WRAPINC(writeBuffCmd[i], CMD_BUFFER_SIZE);
-                    CyExitCriticalSection(intState);
-                    memcpy(buffCmd[i][tempWrite], cmdRxC[i], 2); //queue for later
-                    cntCmd++;
-                    lastCmdSource = i; //store last command source
+                if((0x47 == cmdRxC[i][0]) && (CMD_MAIN_PSOC_ADDRESS == cmdRxC[i][1])) // 0x4728 is reset command & needs to be sent in ISR so it can interrrupt hung program
+                {
+                    CySoftwareReset(); //software reset
+                }
+                uint8 intState = CyEnterCriticalSection();
+                uint8 tempWrite = writeBuffCmd[i];
+                writeBuffCmd[i] = WRAPINC(writeBuffCmd[i], CMD_BUFFER_SIZE);
+                CyExitCriticalSection(intState);
+                memcpy(buffCmd[i][tempWrite], cmdRxC[i], 2); //queue for later
+                cntCmd++;
+                lastCmdSource = i; //store last command source
 //                    }
 //                    else if (tempRes < 0)
 //                    {
 //                        //TODO Error handling
 //                    }
-                }
+//                }
             }
             else 
             {
@@ -1240,6 +1245,7 @@ int InterpretCmdBuffers()
             headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
             return 1;
+        //47 is software reset main which completes in ISR
         case 0x48:
             if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
