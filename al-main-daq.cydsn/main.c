@@ -62,6 +62,7 @@
  * V4.4 Added range commands for HK rate and RTC status bits
  * V4.5 Added Software Reset Main directly in ISR
  * V4.6 SendInitCmd modified for any location in buffer. RTC Init command added
+ * V4.7 Init for Flight with Auto Start Run 1
  *
  * ========================================
 */
@@ -74,7 +75,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 6 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 7 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -376,7 +377,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(38 + 83 + 5 + 6 + 0 + 1)//segments are divived by comments for easier counting
+#define NUMBER_INIT_CMDS	(38 + 83 + 5 + 11 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Event PSOC DAQ Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
@@ -396,19 +397,19 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x06, 0x22},  //6 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0x06, 0x22},  //6 DAC Byte
+	{0x03, 0x22},  //3 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
-	{0x0B, 0x22},  //11 DAC Byte
+	{0x08, 0x22},  //8 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x04, 0x21},  //Channel 4 T4
-	{0x0A, 0x22},  //10 DAC Byte    
+	{0x08, 0x22},  //8 DAC Byte    
     {0x36, 0x22},  //Header for Trigger Mask Set
 	{0x01, 0x21},  //1 Mask Primary 
-	{0x02, 0x22},  //Trigger Mask 02 T1 T2 T4
+	{0x01, 0x22},  //Trigger Mask 01 T1 T2 T3
     {0x36, 0x22},  //Header for Trigger Mask Set
     {0x02, 0x21},  //2 Mask Secondary 
-	{0x06, 0x22},  //Trigger Mask 06 T1 T4
+	{0x04, 0x22},  //Trigger Mask 04 T1 T3 T4
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x01, 0x21},  //1 Tracker
 	{0x04, 0x22},  //Prescale by 4 
@@ -511,18 +512,23 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xC6, 0x37}, //T3 1671V High Voltage
 	{0xBF, 0xB5}, //T4 1603V High Voltage
 	{0xD1, 0x74}, //G  1757V High Voltage
-    //Event PSOC Housekeeping Setup
+    //Event PSOC Housekeeping Setup + Auto Start Run and Error List
     {0x57, 0x22},  //Header for Event PSOC Housekeeping command
 	{0x05, 0x21},  //5 sec Rate
 	{0x01, 0x22},  //1 Include Tracker Rate
     {0x5C, 0x21},  //Header for Event PSOC Tracker Housekeeping command
 	{0x05, 0x21},  //5 min Rate
+    {0x3C, 0x60},  //Header for Start Run
+	{0x00, 0x21},  //0 Run Number MSB
+	{0x01, 0x22},  //0 Run Number LSB
+	{0x01, 0x23},  //Include Tracks
+    {0x00, 0x60},  //Exclude ToF Debug Data
     {0x03, 0x20},  //Header For Read Errors. Init errors proir to this will be sent & cleared
 	//Startup FPGA Input Timing Calibration
 //    {0x48, 0x21},  //Header for FPGA Input Timing Calibration //obsolete in v100 tracker firmware
 //	{0x08, 0x21},  //All FPGA. This command takes time so prefer not to issue an Event PSOC command after
     //Power Board Setup. Placed here to prevent a newly issued Event PSOC command from following 0x48 command 
-	{0x0A, 0xB6},  //10sec Power R/O
+	{0x0A, 0xB6},  //10sec Power Readout
     }; //End init cmds
 #define CMD_BUFFER_SIZE 256 // max value for index since init commands is got longer than half buffer
 #define CMD_MAIN_PSOC_ADDRESS 0b00101000 // Middle nibble of the second command byte is the address (0b1010 for Main PSOC, Event is 0b1000)
