@@ -63,6 +63,7 @@
  * V4.5 Added Software Reset Main directly in ISR
  * V4.6 SendInitCmd modified for any location in buffer. RTC Init command added
  * V4.7 Init for Flight with Auto Start Run 1
+ * V4.8 Added Pins to schematic to assign and document. Changed C code version to 4.8 just to note before flight
  *
  * ========================================
 */
@@ -75,7 +76,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 7 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 8 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
