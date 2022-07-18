@@ -61,6 +61,7 @@
  * V4.3 Added FIFO busy and counter command
  * V4.4 Added range commands for HK rate and RTC status bits
  * V4.5 Added Software Reset Main directly in ISR
+ * V4.6 SendInitCmd modified for any location in buffer. RTC Init command added
  *
  * ========================================
 */
@@ -73,7 +74,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 5 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 6 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -773,25 +774,31 @@ int SendCmdString (uint8 * in)
 
 int SendInitCmds()
 {
-    if (CMD_BUFFER_SIZE <= (ACTIVELEN(readBuffCmd[0], writeBuffCmd[0], CMD_BUFFER_SIZE) + NUMBER_INIT_CMDS)) //check if space for commands
+    uint16 tempNumCmdLeft = (ACTIVELEN(readBuffCmd[0], writeBuffCmd[0], CMD_BUFFER_SIZE) + NUMBER_INIT_CMDS); //uint16 needed to check if space for commands
+    if (CMD_BUFFER_SIZE <= tempNumCmdLeft) //check if space for commands
     {
         cntError++;
         return -ENOMEM;
     }
-	uint8 tempNumCmdLeft = NUMBER_INIT_CMDS;
-	uint8 tempNumCmdPart = 0;
+    tempNumCmdLeft = NUMBER_INIT_CMDS;
+	uint16 tempNumCmdPart = 0;
     uint8 intState = CyEnterCriticalSection();
     uint8 tempWrite = writeBuffCmd[0];
     writeBuffCmd[0] = WRAP(writeBuffCmd[0] + NUMBER_INIT_CMDS, CMD_BUFFER_SIZE);
     CyExitCriticalSection(intState);
-	if(CMD_BUFFER_SIZE <= (tempWrite + tempNumCmdLeft))
+	if(CMD_BUFFER_SIZE <= (tempNumCmdLeft + (uint16)tempWrite))
     {
         tempNumCmdPart = CMD_BUFFER_SIZE - tempWrite; //commands to end of buffer
         memcpy(&buffCmd[0][tempWrite][0], initCmd, (tempNumCmdPart * 2));// load all the init commands into 0 buffer
         tempNumCmdLeft -= tempNumCmdPart;//reduce commands left
         tempWrite = 0;//start begining of buffer
     }
-    memcpy(&buffCmd[0][tempWrite][0], initCmd + (tempNumCmdPart * 2), (tempNumCmdLeft * 2));// load all the init commands into 0 buffer
+    tempNumCmdPart *= 2;
+    tempNumCmdLeft *= 2;
+//    void * debug1 = &(buffCmd[0][tempWrite][0]);//DEBUG
+//    void * debug2 = (void *)initCmd + tempNumCmdPart;//DEBUG
+//    memcpy(debug1, debug2, tempNumCmdLeft);//DEBUG
+    memcpy(&(buffCmd[0][tempWrite][0]), ((void *)initCmd + tempNumCmdPart), tempNumCmdLeft);// load all the init commands into 0 buffer
     
     return NUMBER_INIT_CMDS;
 }
@@ -1244,6 +1251,16 @@ int InterpretCmdBuffers()
 //            RTC_Main_Init();//Sets RTC variables DEBUG
             headerBuffCmd[curChan] = WRAPINC(interpretBuffCmd[curChan], CMD_BUFFER_SIZE);
             interpretBuffCmd[curChan] = headerBuffCmd[curChan];
+            return 1;
+        case 0x46:
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            RTC_Main_Init();
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
         //47 is software reset main which completes in ISR
         case 0x48:
