@@ -64,6 +64,7 @@
  * V4.6 SendInitCmd modified for any location in buffer. RTC Init command added
  * V4.7 Init for Flight with Auto Start Run 1
  * V4.8 Added Pins to schematic to assign and document. Changed C code version to 4.8 just to note before flight
+ * V4.9 Init change for Flight with Secondary PMT Trigger T1 & T3
  *
  * ========================================
 */
@@ -410,7 +411,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x01, 0x22},  //Trigger Mask 01 T1 T2 T3
     {0x36, 0x22},  //Header for Trigger Mask Set
     {0x02, 0x21},  //2 Mask Secondary 
-	{0x04, 0x22},  //Trigger Mask 04 T1 T3 T4
+	{0x05, 0x22},  //Trigger Mask 05 T1 T3
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x01, 0x21},  //1 Tracker
 	{0x04, 0x22},  //Prescale by 4 
@@ -418,9 +419,9 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x02, 0x21},  //2 PMT
 	{0x01, 0x22},  //Prescale by 1     
 //    {0x3A, 0x21},  //Header for Trigger Window Settling Time Set
-//    {0x30, 0x21},  //Settling Time 48. Default 24 TODO Tune
+//    {0x30, 0x21},  //Settling Time 48. Default 24 Obsolete
 //    {0x4B, 0x21},  //Header for Peak Detector Charge Time Set
-//	{0x20, 0x21},  //32 cycle delay. Default 32 TODO Tune
+//	{0x20, 0x21},  //32 cycle delay. Default 32 Obsolete
     {0x4F, 0x21},  //Header for PMT Tracker Trigger Delay Set
 	{0x0C, 0x21},  //12 cycle delay 
     //Event PSOC Tracker Setup
@@ -526,7 +527,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x00, 0x60},  //Exclude ToF Debug Data
     {0x03, 0x20},  //Header For Read Errors. Init errors proir to this will be sent & cleared
 	//Startup FPGA Input Timing Calibration
-//    {0x48, 0x21},  //Header for FPGA Input Timing Calibration //obsolete in v100 tracker firmware
+//    {0x48, 0x21},  //Header for FPGA Input Timing Calibration Obsolete in v100 tracker firmware
 //	{0x08, 0x21},  //All FPGA. This command takes time so prefer not to issue an Event PSOC command after
     //Power Board Setup. Placed here to prevent a newly issued Event PSOC command from following 0x48 command 
 	{0x0A, 0xB6},  //10sec Power Readout
