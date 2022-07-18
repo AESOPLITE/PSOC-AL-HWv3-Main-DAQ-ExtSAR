@@ -67,6 +67,7 @@
  * V4.9 Init change for Flight with Secondary PMT Trigger T1 & T3
  * V4.10 Increased wait for MCP7940N RTC Boot to 1.5 sec
  * V4.11 Increased wait for MCP7940N RTC Boot to 2 sec
+ * V4.12 Increased wait for MCP7940N RTC Boot to 3 sec
  *
  * ========================================
 */
@@ -79,7 +80,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 11 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 12 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -3207,7 +3208,7 @@ int main(void)
 
     I2C_RTC_MasterClearStatus();
     rtcStatus = RTS_SET_MAIN; //changing flags in this will change startup behavior of RTCs
-    CyDelay(2000); //sec delay for boards to init TODO Debug
+    CyDelay(3000); // delay for boards to init 
     
     do  //get set RTC Main
     {
