@@ -68,6 +68,7 @@
  * V4.10 Increased wait for MCP7940N RTC Boot to 1.5 sec
  * V4.11 Increased wait for MCP7940N RTC Boot to 2 sec
  * V4.12 Increased wait for MCP7940N RTC Boot to 3 sec
+ * V4.13 Documentation changes for doxygen
  *
  * ========================================
 */
@@ -1045,6 +1046,24 @@ int CheckCmdBuffers()
     return 0;
 }
 
+/**
+ * @brief Interprets commands already in buffer & executes them if addresses to Main PSOC
+ * @details Each individual Command is 2 bytes, Data Byte followed by Address Byte \n
+ - Sequence of multiple commands is used for more complex actions using the following format:
+ - 1st Data Byte: {7:0} gives the command ID                 
+ - 1st Address Byte: {7:6} and {1:0] give the number of data-byte commands to follow, 0 to 15
+ - address byte {5:2} = 0xA indicate the evet PSOC
+ - All command sequence data arrive in up to 15 subsequent data-byte commands. For Each:
+ - bits {7:0} of the data byte are the data for the command in progress
+ - bits {7:6} and {1:0} of the address byte give the data-byte number, 1 through 15
+ - bits {5:2} of the address byte must match, as usual, the PSOC address of 0x8.
+ Table below Des
+ * ID | Command Data Bytes | Description
+------------- | ------------- | -------------
+0x01-0x0F  | NONE  | Sets the period (in sec) for Sending Main Housekeeping Packets to the Command ID [1-15]
+
+ * @return int Number of commands executed. Negative is errno
+ */
 int InterpretCmdBuffers()
 {
     uint8 search4Cmd = TRUE, i = 0;
