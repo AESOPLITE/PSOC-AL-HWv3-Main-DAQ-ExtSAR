@@ -1,0 +1,23 @@
+var searchData=
+[
+  ['w_0',['w',['../group___c_m_s_i_s__core___debug_functions.html#gad0fb62e7a08e70fc5e0a76b67809f84b',1,'APSR_Type::w()'],['../group___c_m_s_i_s__core___debug_functions.html#gad0fb62e7a08e70fc5e0a76b67809f84b',1,'IPSR_Type::w()'],['../group___c_m_s_i_s__core___debug_functions.html#gad0fb62e7a08e70fc5e0a76b67809f84b',1,'xPSR_Type::w()'],['../group___c_m_s_i_s__core___debug_functions.html#gad0fb62e7a08e70fc5e0a76b67809f84b',1,'CONTROL_Type::w()']]],
+  ['wakeupcfg0_1',['wakeupCfg0',['../structcy_pm_backup_struct.html#afd1d85610438be2187c5bad7f6fed889',1,'cyPmBackupStruct']]],
+  ['wakeupcfg1_2',['wakeupCfg1',['../structcy_pm_backup_struct.html#a98bb83135934b3f3833bcdc861c0e249',1,'cyPmBackupStruct']]],
+  ['wakeupcfg2_3',['wakeupCfg2',['../structcy_pm_backup_struct.html#a3bc90d9ef3a64a90eefbf6c7def5d0b9',1,'cyPmBackupStruct']]],
+  ['wakeuptrim0_4',['wakeupTrim0',['../structcy_pm_backup_struct.html#a381f3b23a8424b24d7f1af5080f431d0',1,'cyPmBackupStruct']]],
+  ['wakeuptrim1_5',['wakeupTrim1',['../structcy_pm_backup_struct.html#add19a608fdac67ccfc3a30f86a5b9494',1,'cyPmBackupStruct']]],
+  ['wakeuptrim3_6',['wakeupTrim3',['../structcy_pm_backup_struct.html#a367cf0a94656c9b8623a96e9b1f1cfa6',1,'cyPmBackupStruct']]],
+  ['wearlevelingfactor_7',['wearLevelingFactor',['../structcy__stc__eeprom__config__t.html#a444b6650464e4226dbdb5d8e0911efb5',1,'cy_stc_eeprom_config_t::wearLevelingFactor()'],['../structcy__stc__eeprom__context__t.html#a444b6650464e4226dbdb5d8e0911efb5',1,'cy_stc_eeprom_context_t::wearLevelingFactor()']]],
+  ['week_8',['Week',['../struct_r_t_c___main___d_s_t_i_m_e.html#af27e45a5d7018e540f2e6258baf1f2f0',1,'RTC_Main_DSTIME']]],
+  ['windex_9',['wIndex',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#a8669ff9a1a6323366f90fb4054f44edb',1,'t_USBUART_CD_cdc_notification']]],
+  ['windexmsb_10',['wIndexMSB',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#ad57feff0bdefe6d316ea03295c5e00ae',1,'t_USBUART_CD_cdc_notification']]],
+  ['wlendaddr_11',['wlEndAddr',['../structcy__stc__eeprom__context__t.html#a4ae7df622340185e32feec7a2e099b19',1,'cy_stc_eeprom_context_t']]],
+  ['wlength_12',['wLength',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#ab269cfb25bcdc9b588c098c43876ecd7',1,'t_USBUART_CD_cdc_notification']]],
+  ['wlengthmsb_13',['wLengthMSB',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#add6574d72c3d96c2258cdf245c277143',1,'t_USBUART_CD_cdc_notification']]],
+  ['writebuffcmd_14',['writeBuffCmd',['../main_8c.html#ac8030098cec9536447c57d47f9bc2ad2',1,'main.c']]],
+  ['writetrans_15',['writeTrans',['../struct_housekeeping_track_i2_c.html#acca2e5eb0667dcfb0febaaa11d32f0f4',1,'HousekeepingTrackI2C']]],
+  ['wserialstate_16',['wSerialState',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#a081e48d2bc480e9e2f6f25e116596aee',1,'t_USBUART_CD_cdc_notification']]],
+  ['wserialstatemsb_17',['wSerialStateMSB',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#a8b3ee3f4ce6e91aa9375e784bdcd9df2',1,'t_USBUART_CD_cdc_notification']]],
+  ['wvalue_18',['wValue',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#a190b99def04a076b7daf2c33e54f4c59',1,'t_USBUART_CD_cdc_notification']]],
+  ['wvaluemsb_19',['wValueMSB',['../structt___u_s_b_u_a_r_t___c_d__cdc__notification.html#a7711e0ca7eeca5fbe8140dabdb04a1e4',1,'t_USBUART_CD_cdc_notification']]]
+];
