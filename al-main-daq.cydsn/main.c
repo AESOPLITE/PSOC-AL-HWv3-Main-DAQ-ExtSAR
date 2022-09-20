@@ -1052,7 +1052,7 @@ int CheckCmdBuffers()
  - Sequence of multiple commands is used for more complex actions using the following format:
  - 1st Data Byte: {7:0} gives the command ID                 
  - 1st Address Byte: {7:6} and {1:0] give the number of data-byte commands to follow, 0 to 15
- - address byte {5:2} = 0xA indicate the evet PSOC
+ - address byte {5:2} = 0xA indicate the main PSOC
  - All command sequence data arrive in up to 15 subsequent data-byte commands. For Each:
  - bits {7:0} of the data byte are the data for the command in progress
  - bits {7:6} and {1:0} of the address byte give the data-byte number, 1 through 15
@@ -1060,7 +1060,17 @@ int CheckCmdBuffers()
  Table below Des
  * ID | Command Data Bytes | Description
 ------------- | ------------- | -------------
-0x01-0x0F  | NONE  | Sets the period (in sec) for Sending Main Housekeeping Packets to the Command ID [1-15]
+0x01-0x0F  | NONE  | Sets the period (in sec) for sending Main Housekeeping Packets to the Command ID [1-15]
+0x31-0x3F  | NONE  | Sets flags for RTC date time  operations if bit is set in least signicant nibble of Command ID. Flags from Most Significant to Least Significant: [Set Main -> Event] [Set Main -> External RTC] [Set External RTC -> Main]
+0x45  | 0: seconds | Sets the internal RTC for the Main PSOC (non persistent over power cycle)
+^ | 1: minutes | ^
+^ | 2: hours | ^
+^ | 3: day-of-week | ^
+^ | 4: day-of-month | ^
+^ | 5: month | ^
+^ | 6: MSB year | ^
+^ | 7: LSB year | ^
+
 
  * @return int Number of commands executed. Negative is errno
  */
@@ -1292,7 +1302,7 @@ int InterpretCmdBuffers()
             RTC_Main_Init();
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
-        //47 is software reset main which completes in ISR
+        //0x47 is software reset main which completes in ISR
         case 0x48:
             if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
