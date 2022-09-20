@@ -1056,7 +1056,7 @@ int CheckCmdBuffers()
  - All command sequence data arrive in up to 15 subsequent data-byte commands. For Each:
  - bits {7:0} of the data byte are the data for the command in progress
  - bits {7:6} and {1:0} of the address byte give the data-byte number, 1 through 15
- - bits {5:2} of the address byte must match, as usual, the PSOC address of 0x8.
+ - bits {5:2} of the address byte must match, as usual, the PSOC address of 0xA.
  Table below Des
  * ID | Command Data Bytes | Description
 ------------- | ------------- | -------------
