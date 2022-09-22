@@ -1065,11 +1065,10 @@ int CheckCmdBuffers()
 0x45  | 0: seconds | Sets the internal RTC for the Main PSOC (non persistent over power cycle)
 ^ | 1: minutes | ^
 ^ | 2: hours | ^
-^ | 3: day-of-week | ^
-^ | 4: day-of-month | ^
-^ | 5: month | ^
-^ | 6: MSB year | ^
-^ | 7: LSB year | ^
+^ | 3: day-of-month | ^
+^ | 4: month | ^
+^ | 5: MSB year | ^
+^ | 6: LSB year | ^
 
 
  * @return int Number of commands executed. Negative is errno
