@@ -1069,6 +1069,7 @@ int CheckCmdBuffers()
 ^ | 4: month | ^
 ^ | 5: MSB year | ^
 ^ | 6: LSB year | ^
+0x46  | NONE | Runs the internal RTC initialization that sets day of week, day of year, and other variables 
 
 
  * @return int Number of commands executed. Negative is errno
