@@ -81,7 +81,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 12 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 14 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -383,7 +383,7 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(38 + 83 + 5 + 11 + 1)//segments are divived by comments for easier counting
+#define NUMBER_INIT_CMDS	(38 + 90 + 5 + 11 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Event PSOC DAQ Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
@@ -509,6 +509,13 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x06, 0x63},  //Tracker G
     {0x03, 0xA0},  //Tracker D
     {0x5B, 0x21},  //Header for Tracker Threshold Increase command. Only gets loaded by 0x56 command 
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
+	{0x06, 0x21},  //Increase tracker threshold by 6
 	{0x06, 0x21},  //Increase tracker threshold by 6
     {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command. This command takes time so prefer not to issue an Event PSOC command after
 	{0x08, 0x21},  //8 Layers. This command takes time so prefer not to issue an Event PSOC command after
