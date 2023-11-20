@@ -508,15 +508,15 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     {0x05, 0x62},  //Tracker F
     {0x06, 0x63},  //Tracker G
     {0x03, 0xA0},  //Tracker D
-    {0x5B, 0x21},  //Header for Tracker Threshold Increase command. Only gets loaded by 0x56 command 
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
-	{0x06, 0x21},  //Increase tracker threshold by 6
+    {0x5B, 0xA0},  //Header for Tracker Threshold Increase command. Only gets loaded by 0x56 command 
+	{0x03, 0x21},  //Increase L0 tracker threshold by 6
+	{0x03, 0x22},  //Increase L1 tracker threshold by 6
+	{0x06, 0x23},  //Increase L2 tracker threshold by 6
+	{0x06, 0x60},  //Increase L3 tracker threshold by 6
+	{0x00, 0x61},  //Increase L4 tracker threshold by 6
+	{0x00, 0x62},  //Increase L5 tracker threshold by 6
+	{0x00, 0x63},  //Increase L6 tracker threshold by 6
+	{0x00, 0xA0},  //Increase L7 tracker threshold by 6
     {0x56, 0x21},  //Header for Tracker ASIC Power On & Config command. This command takes time so prefer not to issue an Event PSOC command after
 	{0x08, 0x21},  //8 Layers. This command takes time so prefer not to issue an Event PSOC command after
     //HV Control Board Setup. Placed here to prevent Event PSOC command following 0x56 command 
