@@ -69,6 +69,7 @@
  * V4.11 Increased wait for MCP7940N RTC Boot to 2 sec
  * V4.12 Increased wait for MCP7940N RTC Boot to 3 sec
  * V4.13 Documentation changes for doxygen
+ * V5.0  High Baud rate set to 115.2k. Init command changes to DefaultSetting v1. Minor cosmetic changes to schematic
  *
  * ========================================
 */
@@ -80,8 +81,8 @@
 //#include "math.h"
 #include "errno.h"
 
-#define MAJOR_VERSION 4 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 14 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MAJOR_VERSION 5 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
+#define MINOR_VERSION 0 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -383,27 +384,27 @@ volatile uint8 continueRead = FALSE;
 //#define TESTTHRESHOLDT4 0x03 //Just for intializing T4 DAC threshold
 
 //AESOPLite Initialization Commands
-#define NUMBER_INIT_CMDS	(38 + 90 + 5 + 11 + 1)//segments are divived by comments for easier counting
+#define NUMBER_INIT_CMDS	(40 + 90 + 5 + 11 + 1)//segments are divived by comments for easier counting
 const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
     //Event PSOC DAQ Trigger Setup
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x01, 0x21},  //Channel ToF 1 
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x20, 0x23},  //32 DAC Byte LSB
+	{0x10, 0x23},  //16 DAC Byte LSB
     {0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x02, 0x21},  //Channel ToF 2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x20, 0x23},  //32 DAC Byte LSB
+	{0x10, 0x23},  //16 DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5 T2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x0F, 0x23},  //15 DAC Byte LSB
+	{0x23, 0x23},  //35 DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
-	{0x06, 0x22},  //6 DAC Byte
+	{0x08, 0x22},  //8 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x02, 0x21},  //Channel 2 T3
-	{0x03, 0x22},  //3 DAC Byte
+	{0x04, 0x22},  //4 DAC Byte
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x03, 0x21},  //Channel 3 T1
 	{0x08, 0x22},  //8 DAC Byte
@@ -418,16 +419,14 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x05, 0x22},  //Trigger Mask 05 T1 T3
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x01, 0x21},  //1 Tracker
-	{0x04, 0x22},  //Prescale by 4 
+	{0xFF, 0x22},  //Prescale by 255 
     {0x39, 0x22},  //Header for Trigger Prescale Set
     {0x02, 0x21},  //2 PMT
-	{0x01, 0x22},  //Prescale by 1     
-//    {0x3A, 0x21},  //Header for Trigger Window Settling Time Set
-//    {0x30, 0x21},  //Settling Time 48. Default 24 Obsolete
-//    {0x4B, 0x21},  //Header for Peak Detector Charge Time Set
-//	{0x20, 0x21},  //32 cycle delay. Default 32 Obsolete
+	{0xFF, 0x22},  //Prescale by 255     
     {0x4F, 0x21},  //Header for PMT Tracker Trigger Delay Set
 	{0x0C, 0x21},  //12 cycle delay 
+	{0x63, 0x21},  //Header for tracker trigger OR versus AND Set 
+	{0x00, 0x21},   //Set to AND both sides of trigger
     //Event PSOC Tracker Setup
 	{0x10, 0x23},  //Header for Tracker command
 	{0x00, 0x21},  //0 ID
@@ -1046,6 +1045,7 @@ int CheckCmdBuffers()
         {
             int tempRes = CmdBytes2String(buffCmd[curChan][readBuffCmd[curChan]], curCmd);
             tempRes = SendCmdString(curCmd);
+            //TODO check tempRes
             readBuffCmd[curChan] = WRAPINC(readBuffCmd[curChan], CMD_BUFFER_SIZE);
             return 1;
         }
@@ -2484,7 +2484,7 @@ CY_ISR(ISRCheckCmd)
     uint8 intState = CyEnterCriticalSection();
     uint8 tempStatus1 = UART_LR_Cmd_1_ReadRxStatus();
     uint8 tempStatus2 = UART_LR_Cmd_2_ReadRxStatus();
-    uint8 tempRx;
+//    uint8 tempRx;
     uint8 i = 0;
 //    buffUsbTxDebug[iBuffUsbTxDebug++] = UART_LR_Cmd_1_GetRxBufferSize(); //debug
     if((tempStatus1 | UART_LR_Cmd_1_RX_STS_FIFO_NOTEMPTY) > 0)
@@ -2503,7 +2503,7 @@ CY_ISR(ISRCheckCmd)
     }
     
     i=1;
-    if((tempStatus1 | UART_LR_Cmd_2_RX_STS_FIFO_NOTEMPTY) > 0)
+    if((tempStatus2 | UART_LR_Cmd_2_RX_STS_FIFO_NOTEMPTY) > 0)
     {
         
         while(UART_LR_Cmd_2_GetRxBufferSize())   
