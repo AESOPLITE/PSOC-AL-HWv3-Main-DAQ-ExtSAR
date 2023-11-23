@@ -532,7 +532,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x05, 0x21},  //5 min Rate
     {0x3C, 0x60},  //Header for Start Run
 	{0x00, 0x21},  //0 Run Number MSB
-	{0x01, 0x22},  //0 Run Number LSB
+	{0x01, 0x22},  //1 Run Number LSB
 	{0x01, 0x23},  //Include Tracks
     {0x00, 0x60},  //Exclude ToF Debug Data
     {0x03, 0x20},  //Header For Read Errors. Init errors proir to this will be sent & cleared
