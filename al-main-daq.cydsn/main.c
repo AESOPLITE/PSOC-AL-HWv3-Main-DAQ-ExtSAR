@@ -70,6 +70,8 @@
  * V4.12 Increased wait for MCP7940N RTC Boot to 3 sec
  * V4.13 Documentation changes for doxygen
  * V5.0  High Baud rate set to 115.2k. Init command changes to DefaultSetting v1. Minor cosmetic changes to schematic
+ * V5.1  Added commmands to set max number of i2c retries from 0 - 3 
+ * V5.2  Final init commands 
  *
  * ========================================
 */
@@ -82,7 +84,7 @@
 #include "errno.h"
 
 #define MAJOR_VERSION 5 //MSB of version, changes on major revisions, able to readout in 1 byte expand to 2 bytes if need
-#define MINOR_VERSION 0 //LSB of version, changes every settled change, able to readout in 1 byte
+#define MINOR_VERSION 2 //LSB of version, changes every settled change, able to readout in 1 byte
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 //#define WRAPINC(a,b) (((a)>=(b-1))?(0):(a + 1))
@@ -390,15 +392,15 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x01, 0x21},  //Channel ToF 1 
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x10, 0x23},  //16 DAC Byte LSB
+	{0x18, 0x23},  //24 DAC Byte LSB
     {0x04, 0x23},  //Header for ToF DAC Threshold Set
 	{0x02, 0x21},  //Channel ToF 2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x10, 0x23},  //16 DAC Byte LSB
+	{0x18, 0x23},  //24 DAC Byte LSB
     {0x01, 0x23},  //Header for DAC Threshold Set
 	{0x05, 0x21},  //Channel 5 T2
 	{0x00, 0x22},  //DAC Byte MSB
-	{0x23, 0x23},  //35 DAC Byte LSB
+	{0x1E, 0x23},  //30 DAC Byte LSB
     {0x01, 0x22},  //Header for DAC Threshold Set
 	{0x01, 0x21},  //Channel 1 G
 	{0x08, 0x22},  //8 DAC Byte
@@ -523,7 +525,7 @@ const uint8 initCmd[NUMBER_INIT_CMDS][2] = {
 	{0xCC, 0x36}, //T2 1718V High Voltage
 	{0xC6, 0x37}, //T3 1671V High Voltage
 	{0xBF, 0xB5}, //T4 1603V High Voltage
-	{0xD1, 0x74}, //G  1757V High Voltage
+	{0xDD, 0x74}, //G  1858V High Voltage
     //Event PSOC Housekeeping Setup + Auto Start Run and Error List
     {0x57, 0x22},  //Header for Event PSOC Housekeeping command
 	{0x05, 0x21},  //5 sec Rate
@@ -596,10 +598,11 @@ typedef struct I2CTrans {
 #define I2C_BUFFER_SIZE (64u)
 #define I2C_READ (1u)
 #define I2C_WRITE (0u)
-#define I2C_MAX_RETRIES (1u)
+//#define I2C_MAX_RETRIES (1u)
 I2CTrans buffI2C[I2C_BUFFER_SIZE];
 uint8 buffI2CRead, buffI2CWrite;
 uint8 numI2CRetry = 0;
+uint8 I2CMaxRetries = 1;
 
 typedef struct HousekeepingTrackI2C {
     uint8 slaveAddress;
@@ -1217,7 +1220,7 @@ int InterpretCmdBuffers()
     uint8 curBuffCmd;
     switch(cmdID)
     {
-        case 0x01 ... 0xF:
+        case 0x01 ... 0x0F:
             if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
             {
                 cntCmdError++;
@@ -1340,6 +1343,16 @@ int InterpretCmdBuffers()
             SendInitCmds();
             headerBuffCmd[curChan] = interpretBuffCmd[curChan];
             return 1;
+        case 0x50 ... 0x53:
+            if (CMD_MAIN_PSOC_ADDRESS != buffCmd[curChan][headerBuffCmd[curChan]][1])
+            {
+                cntCmdError++;
+                headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+                return -ENOEXEC;
+            }
+            I2CMaxRetries = cmdID & 0x03; //set I2CMaxRetries 0-3 default 1
+            headerBuffCmd[curChan] = interpretBuffCmd[curChan];
+            return 1;
         default:
             break;
     }
@@ -1419,7 +1432,8 @@ uint8 CheckI2C()
                         numI2CRetry++;
                     }
                 }
-                if (I2C_MAX_RETRIES <= numI2CRetry)
+//                if (I2C_MAX_RETRIES <= numI2CRetry)
+                if (I2CMaxRetries <= numI2CRetry)
                 {
                     buffI2C[buffI2CRead].error = errors;
                     buffI2CRead = WRAPINC(buffI2CRead, I2C_BUFFER_SIZE);
